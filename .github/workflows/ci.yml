@@ -3,6 +3,9 @@ name: CI
 on:
   push:
     branches: [main, master]
+    # Tags must be listed explicitly. With only 'branches' configured, pushing
+    # a v* tag starts no run at all, so the publish job below never executes.
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
