@@ -66,14 +66,21 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          # Pin the version this project is developed against. An unpinned
+          # 'stable' pulled a newer SDK whose deprecation notices (for example
+          # package:flutter/material.dart -> package:material_ui/material_ui.dart)
+          # turned `flutter analyze` red without any change in our code.
+          flutter-version: 3.47.9
           channel: stable
           cache: true
 
       - name: Install dependencies
         run: flutter pub get
 
+      # Info-level lints are advisory. Failures are reserved for errors and
+      # warnings, so a new SDK's deprecation churn cannot block the build.
       - name: Analyze
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Test
         run: flutter test
@@ -103,6 +110,77 @@ jobs:
 
       - name: Test
         run: cargo test -p dsh-mobile-iroh-core -p dsh-mobile-iroh-host
+
+  apk:
+    name: Android APK (debug)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.9
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+          key: android
+
+      # The .so files are git-ignored (19 MB each), so a plain checkout has no
+      # native transport. Gradle will happily build an APK without them and the
+      # result crashes at runtime with UnsatisfiedLinkError the first time iroh
+      # is used. Cross-compile them here before building the APK.
+      - name: Install Android NDK
+        run: |
+          set -euo pipefail
+          NDK_VERSION=28.2.13676358
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" \
+            --install "ndk;${NDK_VERSION}" > /dev/null
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Build native transport (arm64-v8a, x86_64)
+        run: |
+          set -euo pipefail
+          bash native/iroh-android/build-android.sh arm64-v8a
+          bash native/iroh-android/build-android.sh x86_64
+
+      - name: Assert native libraries are packaged
+        run: |
+          set -euo pipefail
+          for abi in arm64-v8a x86_64; do
+            f="flutter/android/app/src/main/jniLibs/${abi}/libdsh_mobile_iroh_android_transport.so"
+            test -f "$f" || { echo "missing $f"; exit 1; }
+            echo "ok $f ($(stat -c%s "$f") bytes)"
+          done
+
+      - name: Build APK
+        working-directory: flutter
+        run: flutter build apk --debug
+
+      - name: Verify APK contains the native transport
+        run: |
+          set -euo pipefail
+          APK=flutter/build/app/outputs/flutter-apk/app-debug.apk
+          unzip -l "$APK" | grep -q libdsh_mobile_iroh_android_transport.so \
+            || { echo "APK is missing the iroh native library"; exit 1; }
+          unzip -l "$APK" | grep libdsh_mobile_iroh_android_transport.so
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-mobile-debug-apk
+          path: flutter/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14
 
   publish:
     name: Publish to npm
