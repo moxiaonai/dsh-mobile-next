@@ -145,8 +145,17 @@ jobs:
         run: |
           set -euo pipefail
           NDK_VERSION=28.2.13676358
-          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" \
-            --install "ndk;${NDK_VERSION}" > /dev/null
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+
+          # Accept any pending SDK licenses first. 'yes' is fed through a pipe,
+          # so it is killed by SIGPIPE once sdkmanager exits; with pipefail that
+          # would fail the step (exit 141), hence the explicit '|| true'.
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+
+          "$SDKMANAGER" --install "ndk;${NDK_VERSION}" < /dev/null > /dev/null
+
+          test -d "${ANDROID_HOME}/ndk/${NDK_VERSION}" \
+            || { echo "NDK ${NDK_VERSION} not installed"; exit 1; }
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
       - name: Build native transport (arm64-v8a, x86_64)
