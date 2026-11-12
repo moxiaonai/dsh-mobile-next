@@ -119,6 +119,11 @@ DerivedData/
 /out/
 /tmp-redact/
 
+# 图标生成过程中的中间文件：渲染模板与打包前哈希快照。
+# 保留在磁盘上供本地复现，但不进仓库。
+/design/logo/_build/_raster.html
+/design/logo/next-whale-v2/project-hashes-before.json
+
 # ---------- 日志 ----------
 *.log
 
