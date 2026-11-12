@@ -264,6 +264,39 @@ pnpm publish --access public
 
 `~/.npmrc` 若指向内网 registry，需显式覆盖：`pnpm publish --registry=https://registry.npmjs.org`。
 
+### Android release 签名
+
+仓库**不包含 keystore**。没有 `flutter/android/key.properties` 时，`release`
+构建类型复用 debug 签名——产物仅供测试，不能分发或上架。
+
+生成本地 keystore（**请自行保管，不要提交**）：
+
+```bash
+keytool -genkeypair -v -keystore upload-keystore.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+在 `flutter/android/key.properties` 写入（该文件已被 gitignore）：
+
+```properties
+storeFile=/absolute/path/to/upload-keystore.jks
+storePassword=...
+keyAlias=upload
+keyPassword=...
+```
+
+之后 `flutter build apk --release` 即产出签名包。
+
+**CI 中启用**：在仓库 Settings → Secrets 添加四个 secret，APK job 会自动切到
+release 签名，否则仍构建 debug 包（fork 与 PR 也能拿到可测产物）。
+
+| Secret | 内容 |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | `base64 -i upload-keystore.jks \| pbcopy` 的结果 |
+| `ANDROID_KEYSTORE_PASSWORD` | storePassword |
+| `ANDROID_KEY_ALIAS` | keyAlias |
+| `ANDROID_KEY_PASSWORD` | keyPassword |
+
 ---
 
 ## 已知限制
@@ -273,7 +306,7 @@ pnpm publish --access public
 - **iOS 走 PWA 路径**，不分发原生 iOS App。
 - **Flutter 客户端尚未做跨网真机验证**。全局 VPN / TUN 与 fake-IP DNS 可能干扰 iroh 直连/中继。
 - **Android 原生库需自行构建**。`jniLibs/` 下的 `.so` 未入库（每个约 19 MB），复现方式见 [`native/iroh-android/build-android.sh`](native/iroh-android/build-android.sh)。
-- **客户端签名仍是 debug 的**。`applicationId` 已改为 `com.fenewbee.dsh_mobile_next`，但 `release` 构建仍复用 debug 签名。正式发布前必须配置独立的 release keystore。
+- **release 签名是可选的，默认回退到 debug**。仓库不包含 keystore；没有 `flutter/android/key.properties` 时，`release` 构建类型复用 debug 签名，产物仅供测试，不能分发。配置方式见下方「Android release 签名」。
 
 ---
 

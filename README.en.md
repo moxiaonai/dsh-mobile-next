@@ -265,6 +265,41 @@ pnpm publish --access public
 
 If `~/.npmrc` points at an internal registry, override it explicitly: `pnpm publish --registry=https://registry.npmjs.org`.
 
+### Android release signing
+
+The repository ships **no keystore**. Without `flutter/android/key.properties`,
+the `release` build type reuses the debug key, so the artifact is test-only and
+must not be distributed.
+
+Generate a local keystore (**keep it safe, never commit it**):
+
+```bash
+keytool -genkeypair -v -keystore upload-keystore.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+Write `flutter/android/key.properties` (already git-ignored):
+
+```properties
+storeFile=/absolute/path/to/upload-keystore.jks
+storePassword=...
+keyAlias=upload
+keyPassword=...
+```
+
+`flutter build apk --release` then produces a signed APK.
+
+**In CI**: add the four secrets below under Settings → Secrets. The APK job
+switches to release signing automatically; without them it keeps building a
+debug APK so forks and pull requests still get a testable artifact.
+
+| Secret | Value |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | output of `base64 -i upload-keystore.jks` |
+| `ANDROID_KEYSTORE_PASSWORD` | storePassword |
+| `ANDROID_KEY_ALIAS` | keyAlias |
+| `ANDROID_KEY_PASSWORD` | keyPassword |
+
 ---
 
 ## Known limitations
@@ -274,7 +309,7 @@ If `~/.npmrc` points at an internal registry, override it explicitly: `pnpm publ
 - **iOS uses the PWA path**; no native iOS app is distributed.
 - **The Flutter client has not been verified on a real device across networks.** Global VPN / TUN and fake-IP DNS may interfere with iroh direct connections and relaying.
 - **Android native libraries must be built locally.** The `.so` files under `jniLibs/` are not committed (~19 MB each); see [`native/iroh-android/build-android.sh`](native/iroh-android/build-android.sh).
-- **The client is still debug-signed.** `applicationId` is now `com.fenewbee.dsh_mobile_next`, but the `release` build type still reuses the debug signing config. A dedicated release keystore is required before any real release.
+- **Release signing is optional and falls back to debug.** The repository ships no keystore; without `flutter/android/key.properties`, the `release` build type reuses the debug key, so the artifact is test-only and not distributable. See "Android release signing" below.
 
 ---
 

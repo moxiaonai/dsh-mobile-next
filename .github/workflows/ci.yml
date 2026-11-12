@@ -173,22 +173,72 @@ jobs:
             echo "ok $f ($(stat -c%s "$f") bytes)"
           done
 
+      # Release signing is opt-in. When the four ANDROID_* secrets are present
+      # this job produces a signed release APK; otherwise it falls back to a
+      # debug APK so forks and pull requests still get a testable artifact.
+      - name: Prepare release signing
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ] || [ -z "${KEY_ALIAS:-}" ]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "No signing secrets configured; building a debug APK."
+            exit 0
+          fi
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+          KEYSTORE_PATH="${RUNNER_TEMP}/upload-keystore.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          {
+            echo "storeFile=${KEYSTORE_PATH}"
+            echo "storePassword=${KEYSTORE_PASSWORD}"
+            echo "keyAlias=${KEY_ALIAS}"
+            echo "keyPassword=${KEY_PASSWORD}"
+          } > flutter/android/key.properties
+          # key.properties is git-ignored; assert that before anything else.
+          git check-ignore -q flutter/android/key.properties \
+            || { echo "key.properties is not git-ignored"; exit 1; }
+
       - name: Build APK
         working-directory: flutter
-        run: flutter build apk --debug
+        run: |
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+            flutter build apk --release
+          else
+            flutter build apk --debug
+          fi
 
       - name: Verify APK contains the native transport
         run: |
           set -euo pipefail
-          APK=flutter/build/app/outputs/flutter-apk/app-debug.apk
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+            APK=flutter/build/app/outputs/flutter-apk/app-release.apk
+          else
+            APK=flutter/build/app/outputs/flutter-apk/app-debug.apk
+          fi
           unzip -l "$APK" | grep -q libdsh_mobile_iroh_android_transport.so \
             || { echo "APK is missing the iroh native library"; exit 1; }
           unzip -l "$APK" | grep libdsh_mobile_iroh_android_transport.so
 
+      - name: Verify APK signature
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+            APK=flutter/build/app/outputs/flutter-apk/app-release.apk
+          else
+            APK=flutter/build/app/outputs/flutter-apk/app-debug.apk
+          fi
+          APKSIGNER=$(find "${ANDROID_HOME}/build-tools" -name apksigner | sort | tail -1)
+          "$APKSIGNER" verify --print-certs "$APK"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: dsh-mobile-debug-apk
-          path: flutter/build/app/outputs/flutter-apk/app-debug.apk
+          name: dsh-mobile-apk
+          path: flutter/build/app/outputs/flutter-apk/*.apk
           retention-days: 14
 
   publish:
