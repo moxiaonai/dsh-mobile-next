@@ -144,7 +144,7 @@ node scripts/install-local.mjs --revert   # 改回软链，继续开发
 
 ⚠ tarball 必须落在**稳定目录**（仓库 `dist/`），不能放临时目录 ——
 `pnpm add` 会把路径原样写进 `dependencies`，temp 目录被清理后
-下次 `pnpm install` 直接失败（实测踩过）。
+下次 `pnpm install` 会直接失败。
 
 ### 开发期热重载（不用重启 DSH）
 
@@ -468,136 +468,6 @@ deviceId, tokenDigest(SHA-256), label, createdAt, expiresAt, lastSeenAt
 
 远程通道默认**关闭**，且每次进程启动都需显式 `start()`，磁盘不保存启用状态。
 
-## 八个真实的实现陷阱（值得记录）
-
-### 陷阱一：默认导出缺失
-
-首次加载报 `plugin is undefined` —— `src/index.ts` 只导出了**具名** `plugin`，
-而 DSH loader 可能按默认导出取插件函数。
-
-修复：同时提供 `export default` 与具名导出，兼容两种约定。
-
-### 陷阱二：`register` 的形态是 `kind` 不是 `method`
-
-`ctx.webServer.register(route)` 的契约来自
-`@deepseek-ai/dsh-host-webserver` 的 `WebRoute`：
-
-```js
-register(route) {
-  const table = route.kind === "exact" ? this.exact : this.prefixes;
-  // ...
-}
-```
-
-我最初写成 `{ method: 'GET', path, handler }`。后果是**静默失败**：
-
-- `route.kind` 是 `undefined` → 落进 `prefixes` 表
-- 精确路径**永远匹配不到** → 请求 404
-- 注册本身不报错，看起来"成功"了
-
-**这个坑只有真正发请求才会暴露。** 修复后加了 `contract.test.ts`
-逐行复刻真实 `register` 语义，防止再被改坏。
-
-### 陷阱三：管理路由不能放在 `/api/` 下
-
-DSH 对 `/api/*` 有**自己的认证层**（浏览器会话 Cookie），未认证返回
-`401 unauthorized`，**在到达我的 handler 之前就被拦掉**。
-
-实测现象很迷惑：
-- `status` / `devices` / `pairing` 能用
-- 新加的 `probe-upstream` 一直 401
-- 一度以为是路由注册失败，查了很久
-
-原因：这些端点碰巧走了不同分支，而新端点直接撞上 DSH 的 `/api` 认证。
-改用 `/mobile-access-next/` 前缀（与参考实现一致）后立刻通了。
-
-### 陷阱四：DSH 自己也要求认证
-
-**这是整个插件最容易漏的一环。**
-
-DSH 的 Web 页面用 `dsh-auth-*` 签名 Cookie 校验，密钥在
-`$DSH_HOME/.credentials.yaml`。所以只做设备认证是不够的：
-
-```
-手机 --[我的Cookie]--> 网关 --[无 Cookie]--> DSH
-                                              ↓
-                                  "dsh web authentication required"
-```
-
-**最迷惑的地方**：看到 401 时，第一反应是"我的会话校验失败了"，
-但实际是 DSH 上游在拒绝。两者文案不同：
-
-| 来源 | 文案 |
-| --- | --- |
-| 本插件 | `dsh-mobile-next: authentication required.` |
-| DSH | `dsh web authentication required; reopen the URL printed by dsh web.` |
-
-**正确做法**（照参考实现）：用 `ctx.connection.authenticatedUrl(origin)`
-拿带 launch token 的 URL → GET 它 → DSH 返回 `303` + `Set-Cookie: dsh-auth-*`
-→ 注入每个代理请求。
-
-见 `src/upstream-auth.ts`。
-
-### 陷阱五：客户端必须固定私有 CA
-
-用 Flutter 的默认 `HttpClient` 连网关时报：
-
-```
-HandshakeException: CERTIFICATE_VERIFY_FAILED
-```
-
-原因：私有 CA 不在系统信任链里。这不是缺陷，是**自签方案的必然结果**。
-
-**修复**：`IoHttpTransport` 加 `trustedCaPem` 参数，用 `SecurityContext`
-只信任该 CA（`withTrustedRoots: false`，不叠加系统根）。
-
-⚠ **绝不能用 `badCertificateCallback = (_,_,_) => true`** ——
-那等于没有 TLS，中间人可以随意劫持。
-
-### 陷阱六：配对响应要同时给 Cookie 和 body token
-
-浏览器路径靠 `Set-Cookie`，原生客户端靠 body 里的 `sessionToken`（存 Keystore）。
-
-只给 Cookie 时，Flutter 客户端报 `pairing response missing "sessionToken"`。
-参考实现 `dsh-mobile` 两者都给，这里照做。
-
-### 陷阱七：二维码指向 POST 端点会 405
-
-二维码内容只能是一个 URL，**扫码必然是 GET 请求**。
-
-我最初让 `pairingUrl` 指向 `/mobile-access-next/pair` —— 那是 POST 端点。
-扫码得到 **405**。
-
-**修复**：加一个 GET 页面（`#handlePairPage`），渲染 HTML 并自动提交 POST。
-现在扫码流程是：
-
-```
-扫码 → GET /pair?token=…（HTML 页）→ 页面 JS 自动 POST → 201 → 「进入 DSH」
-```
-
-页面上有中文提示与「进入 DSH」按钮，并区分了「配对码无效/已过期」。
-
-### 陷阱八：证书链
-
-服务器证书最初用 `selfsigned.generate()`，测试报 `self-signed certificate`。
-
-查源码发现：
-
-```js
-cert.sign(keyPair.privateKey, ...)   // 永远用自己的私钥签 = 自签
-```
-
-`selfsigned` **不支持用现有 CA 签发**，只会生成自签证书。
-
-改用 `node-forge` 手动构造 + `cert.sign(caPrivateKey)` 后，又踩了两个：
-
-| 错误 | 原因 | 修复 |
-| --- | --- | --- |
-| `unable to verify the first certificate` | 只给叶子证书，客户端不知签发者 | 客户端传 `ca:` 显式信任 |
-| `self-signed certificate in certificate chain` | 把自签 CA 也塞进链里 | 服务器只发叶子，CA 单独提供 |
-
-**这个坑只有客户端真正校验证书链时才暴露**。如果测试里 `rejectUnauthorized: false`，永远发现不了。
-
 ## 管理 API
 
 全部在 `http://127.0.0.1:<dsh-port>/mobile-access-next/` 下（**回环专用**）：
@@ -614,7 +484,7 @@ cert.sign(keyPair.privateKey, ...)   // 永远用自己的私钥签 = 自签
 | POST | `/devices/revoke-all` | 一次撤销全部（服务端单事务） |
 
 > ⚠ **路径前缀不是 `/api/`**。DSH 对 `/api/*` 有自己的浏览器认证层，
-> 未认证会在到达 handler 前返回 401。实测踩过，见下文「陷阱三」。
+> 未认证会在到达 handler 前返回 401。
 
 > ⚠ **网关不会透传这些路径**。`/mobile-access-next/*` 下除 `/pair` 与 `/health`
 > 之外一律 404（`gateway.ts`）。否则一台已配对的手机就能
@@ -643,11 +513,6 @@ node scripts/verify-package.mjs   # tarball 独立安装 + 双面加载
 node scripts/verify-patch.mjs     # cordis patch 形态
 ```
 
-⚠ `tsdown` 的两个配置是**并行**执行的，所以 `clean` 只能在 build 脚本里做一次
-（`rm -rf lib`）。曾把 `clean: true` 放在 host 配置里，结果 host 的 clean
-在 client 写完之后把 `lib/client.js` 删掉了 —— tarball 少了 client 面，
-插件装上了但面板不出现。
-
 ## 已知限制
 
 | 限制 | 说明 |
@@ -657,129 +522,3 @@ node scripts/verify-patch.mjs     # cordis patch 形态
 | 手机端 App 未接新端点 | `flutter/` 侧的 UI 重设计是另一个交付面，本轮只改了电脑端插件 |
 | 配对令牌在内存里 | DSH 重启后未用完的配对码失效，需要重新生成（设备凭据不受影响） |
 
-### 陷阱九：网关会把管理路径透传给手机（安全边界）
-
-**这是本轮修掉的一个真实漏洞。**
-
-`admin.ts` 的注释原本写着"这些路由只在回环注册，手机看不到也调不到"。
-这句话**不成立**：`gateway.ts` 的请求门只处理 `/pair` 与 `/health`，
-其余 `/mobile-access-next/*` 全部落到"校验会话后透传给 DSH"——
-而管理路由正注册在 DSH 那边。
-
-后果：任何**已配对**的手机可以
-
-```
-POST /mobile-access-next/pairing          → 给自己签发新令牌（无限自我续期）
-POST /mobile-access-next/devices/revoke   → 踢掉其他设备
-```
-
-修法是在网关里显式 404：
-
-```ts
-if (pathname.startsWith(`${AUTH_PREFIX}/`)) {
-  sendJson(response, 404, { error: 'not_found' })
-  return
-}
-```
-
-顺带的好处：漏注册的新端点会立刻 404 暴露，而不是变成"接口写好了但一直 404"
-这种需要排查的谜。
-
-回归测试在 `tests/gateway.test.ts`：对 7 条管理路径各发两次请求
-（带合法 Cookie / 不带），全部断言 404，并断言设备数没有增加。
-
-### 陷阱十：`tsdown` 的两个配置并行，`clean` 会互相打架
-
-`defineConfig([hostConfig, clientConfig])` 是**并行**执行的。
-把 `clean: true` 放在 host 配置里，host 的 clean 可能在 client 写完之后
-把 `lib/client.js` 删掉。
-
-症状：`pnpm pack` 出的 tarball 少了 `client.js`，插件装上了但**面板不出现**，
-控制台也没有明显报错（client 模块根本不在清单里）。
-
-修法：两个配置都 `clean: false`，清目录交给 build 脚本（`rm -rf lib && tsdown`）。
-
-### 陷阱十一：JSX 的 `react/jsx-runtime` 必须单独 external
-
-`external: ['react']` **不够**。rolldown 会把 `react/jsx-runtime` 整个内联进来：
-
-```
-external: ['react']                     → client.js 31.9 KB（内联了 jsx-runtime）
-external: ['react', 'react/jsx-runtime'] → client.js  1.6 KB（只留 require）
-```
-
-内联意味着插件里多出一份独立的 React 运行时，hooks 与宿主不同源 ——
-面板状态可能不更新，且难以排查。`package.json` 的 `dsh.client.external`
-只在"不在种子表里"时才需要写；`react` 与 `react/jsx-runtime` 都在种子表里。
-
-### 陷阱十二：`label-caption` 与状态色不能直接当正文色
-
-宿主 token 是给"装饰性"信息用的，拿来写正文不达标（实测）：
-
-| token | 用作文字时的对比度 | 处理 |
-| --- | --- | --- |
-| `--dsw-alias-label-caption` (#adb2b8) on white | **2.13:1** | `color-mix(caption 60%, label-primary)` → 4.84:1 |
-| `state-success-primary` (#22c55e) on `success-tertiary` | **2.09:1** | `color-mix(success 45%, label-primary)` → 6.78:1 |
-| `state-warn-primary` (#f59e0b) on `warn-tertiary` | **1.99:1** | 同上 → 6.61:1 |
-
-深色主题下这些 color-mix 结果分别是 8.79 / 7.91 / 10.92，也达标。
-这与宿主自己 `contextGreen` 用的 `color-mix(... 68%, label-secondary)` 是同一种思路。
-
-### 陷阱十三：软链安装让「更新」永远灰，且不可复现
-
-`listBundles()` 对软链安装返回 `installed: false` —— DSH 的 `updateRefusal`
-要求插件「从 registry 以自身包名安装」，`file:` / 软链 / git 都不满足。
-所以插件页的「更新」按钮永远是灰的，只能手工重装。
-
-更隐蔽的后果是**不可复现**：profile 的 `dependencies` 与 `pnpm-lock.yaml`
-里都没有它，换台机器 clone 下来装不出一样的环境。
-
-用 `node scripts/install-local.mjs` 换成真实安装即可（`installed` 变 `true`）。
-
-### 陷阱十四：`pnpm add <tarball>` 会把临时路径写进 dependencies
-
-`pnpm add /tmp/xxx/dsh-mobile-next-0.2.0.tgz` 之后，profile 的
-`dependencies` 里是 `file:/tmp/xxx/dsh-mobile-next-0.2.0.tgz`。
-如果 tarball 在 `mkdtemp` 目录里、脚本结束时被删掉，**下次 `pnpm install` 直接失败**。
-
-实测踩过：第一版 `install-local.mjs` 用 `mkdtempSync` 打包，`finally` 里清理，
-结果 profile 的 `dependencies` 指向了一个已经不存在的文件。
-
-修法：tarball 落在仓库的 `dist/`（稳定路径），脚本不删它。
-
-### 陷阱十五：仓库内 `pnpm pack` 会跑 prepack，可能清掉 node_modules
-
-`pnpm pack` 会执行 `prepack` 脚本。如果 `prepack` 里有 `pnpm run build`
-而 `build` 是 `rm -rf lib && tsdown`，在某些状态下（依赖目录不完整）
-会连 `node_modules` 一起丢掉，后续 `tsdown: command not found`。
-
-现在 `prepack` 只做 `pnpm run build`，重活（typecheck + test + verify-package）
-放在 `prepublishOnly`，只在真正 `npm publish` 时跑。
-
-`install-local.mjs` 还额外做了两件事：
-
-- 打包前检查仓库 `node_modules/tsdown` 在不在，缺了先 `pnpm install`；
-- `pnpm pack --config.ignore-scripts=true` 跳过 prepack（上面已经显式 build 过）。
-
-### 陷阱十六：仓库 `node_modules` 缺失会让 host 面整个挂掉
-
-这个坑最隐蔽，因为**症状与原因完全不像**。
-
-软链安装时，插件代码从**仓库目录**解析依赖，所以 `require('qrcode')`
-走的是仓库的 `node_modules`。如果仓库 `node_modules` 被删（例如打包流程
-把它清掉了），loader 报：
-
-```
-failed to import: Error [ERR_MODULE_NOT_FOUND]:
-Cannot find package 'qrcode' imported from /Users/…/dsh-mobile-next/lib/index.js
-```
-
-后果不是"面板不显示"，而是：
-
-- `listPlugins()` 里该条目 `fiberPhase: null`（没挂载）
-- **host 面的管理端点全部 404**（`/mobile-access-next/status` 直接 404）
-- 客户端模块也不进 boot manifest
-
-排查顺序建议：先看 `/mobile-access-next/status` 是否 200，再看
-`pluginManager/listPlugins` 的 `fiberPhase`，最后看 loader 日志里的 import 错误。
-别一上来就怀疑网关或证书。
