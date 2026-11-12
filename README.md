@@ -256,13 +256,29 @@ node scripts/verify-package.mjs    # tarball 可独立安装并加载
 
 ### 发版
 
+**推荐：打 tag 触发 CI 自动发布（Trusted Publishing，无需任何 token）**
+
 ```bash
 cd dsh-mobile-next
-npm version minor          # 保证 tag 与 package.json 一致
-pnpm publish --access public
+npm version minor          # 同时更新 package.json 与 git tag
+git push --follow-tags
 ```
 
-`~/.npmrc` 若指向内网 registry，需显式覆盖：`pnpm publish --registry=https://registry.npmjs.org`。
+CI 的 `publish` job 只在 `v*` tag 时运行，通过 GitHub OIDC 向 npm 换取短时凭据，
+并自动附加 provenance 证明。发布前会校验 tag 与 `package.json` 版本一致，不一致则失败。
+
+**首次配置**（每个包只需一次）：
+
+1. 打开 https://www.npmjs.com/package/dsh-mobile-next/access
+2. Trusted Publisher → GitHub Actions
+3. 填 Organization/User `moxiaonai`、Repository `dsh-mobile-next`、Workflow `ci.yml`
+
+配置后**不要再配 `NPM_TOKEN`**。npm 已宣布 2027 年 1 月起禁止 bypass-2FA token
+直接发布，OIDC 是官方替代方案。
+
+**手动发布**（应急）：需要带 bypass 2FA 的 granular token，且该 token 每次发布都要
+过 OTP；`npm publish` 前确保 `~/.npmrc` 不指向内网 registry，或加
+`--registry=https://registry.npmjs.org`。
 
 ### Android release 签名
 

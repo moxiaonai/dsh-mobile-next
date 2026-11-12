@@ -257,13 +257,31 @@ node scripts/verify-package.mjs    # tarball installs and loads standalone
 
 ### Releasing
 
+**Recommended: push a tag and let CI publish (Trusted Publishing, no token)**
+
 ```bash
 cd dsh-mobile-next
-npm version minor          # keeps the git tag in sync with package.json
-pnpm publish --access public
+npm version minor          # updates package.json and creates the git tag
+git push --follow-tags
 ```
 
-If `~/.npmrc` points at an internal registry, override it explicitly: `pnpm publish --registry=https://registry.npmjs.org`.
+The `publish` job runs only on `v*` tags. It exchanges a GitHub OIDC token for a
+short-lived npm credential and attaches a provenance attestation. It also
+verifies that the tag matches `package.json` and fails otherwise.
+
+**One-time setup** (per package):
+
+1. Open https://www.npmjs.com/package/dsh-mobile-next/access
+2. Trusted Publisher → GitHub Actions
+3. Enter Organization/User `moxiaonai`, Repository `dsh-mobile-next`, Workflow `ci.yml`
+
+Do **not** add an `NPM_TOKEN` secret afterwards. npm has announced that from
+January 2027 bypass-2FA tokens can no longer publish directly; OIDC is the
+supported replacement.
+
+**Manual publish** (fallback) requires a granular token with 2FA bypass, and
+each publish still needs an OTP. Make sure `~/.npmrc` does not point at an
+internal registry, or pass `--registry=https://registry.npmjs.org`.
 
 ### Android release signing
 
