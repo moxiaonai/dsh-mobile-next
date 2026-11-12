@@ -25,6 +25,7 @@
     "assets/icon.svg",
     "cordis.patch.yml",
     "README.md",
+    "README.en.md",
     "docs/*.jpg",
     "docs/remote-access.md"
   ],
