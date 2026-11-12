@@ -70,5 +70,19 @@
     "dsh-plugin",
     "mobile"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "author": "wuwenjing",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moxiaonai/dsh-mobile-next.git",
+    "directory": "dsh-mobile-next"
+  },
+  "homepage": "https://github.com/moxiaonai/dsh-mobile-next/tree/main/dsh-mobile-next#readme",
+  "bugs": {
+    "url": "https://github.com/moxiaonai/dsh-mobile-next/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  }
 }
