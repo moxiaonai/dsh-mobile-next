@@ -14,7 +14,9 @@ Rust source copied from saya-ch/dsh-mobile native/iroh-android-transport commit
 `4422eb7ca6bb47f468950d5f1996ad3b38b21fa0` (2026-11-12 checkout).
 This transport declares MIT; retain LICENSE (Copyright 2026 Guangqi Zhang) and
 LICENSE.apache for the main repository. The only modification to upstream Rust
-is JNI symbols renamed for the existing Flutter package `com.example.dsh_mobile`.
+is JNI symbols renamed for the Flutter package `com.fenewbee.dsh_mobile_next`.
+Because the JNI entry points are name-bound (no `RegisterNatives`), the Rust
+symbols must be kept in sync with the Kotlin package name.
 No Android application ID, signature, keystore or SDK installation is changed.
 Reference standalone implementation: saya-ch/dsh-mobile-iroh commit
 `b1d6ecdc5a22630e4edae07e44d2f0aa94a26fc9`.

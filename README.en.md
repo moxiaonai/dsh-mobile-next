@@ -274,7 +274,7 @@ If `~/.npmrc` points at an internal registry, override it explicitly: `pnpm publ
 - **iOS uses the PWA path**; no native iOS app is distributed.
 - **The Flutter client has not been verified on a real device across networks.** Global VPN / TUN and fake-IP DNS may interfere with iroh direct connections and relaying.
 - **Android native libraries must be built locally.** The `.so` files under `jniLibs/` are not committed (~19 MB each); see [`native/iroh-android/build-android.sh`](native/iroh-android/build-android.sh).
-- **The client is debug-signed** and `applicationId` is still `com.example.dsh_mobile`. Both must be replaced before any real release.
+- **The client is still debug-signed.** `applicationId` is now `com.fenewbee.dsh_mobile_next`, but the `release` build type still reuses the debug signing config. A dedicated release keystore is required before any real release.
 
 ---
 

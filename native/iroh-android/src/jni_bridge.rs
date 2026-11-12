@@ -42,7 +42,7 @@ static INITIALIZING: Mutex<()> = Mutex::new(());
 /// Publish a process-lifetime Application Context before iroh DNS or HTTPS is used.
 #[cfg(target_os = "android")]
 #[no_mangle]
-pub extern "system" fn Java_com_example_dsh_1mobile_IrohNative_nativeInitialize(
+pub extern "system" fn Java_com_fenewbee_dsh_1mobile_1next_IrohNative_nativeInitialize(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     application: JObject<'_>,
@@ -284,7 +284,7 @@ where
 
 /// Return peer/port metadata on a worker thread. A positive monotonic id owns cancellation.
 #[no_mangle]
-pub extern "system" fn Java_com_example_dsh_1mobile_IrohNative_nativeConnect(
+pub extern "system" fn Java_com_fenewbee_dsh_1mobile_1next_IrohNative_nativeConnect(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     request_id: jlong,
@@ -333,7 +333,7 @@ pub extern "system" fn Java_com_example_dsh_1mobile_IrohNative_nativeConnect(
 
 /// Cancel only this owner, including requests not yet entered by a queued worker.
 #[no_mangle]
-pub extern "system" fn Java_com_example_dsh_1mobile_IrohNative_nativeClose(
+pub extern "system" fn Java_com_fenewbee_dsh_1mobile_1next_IrohNative_nativeClose(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     request_id: jlong,
@@ -367,7 +367,7 @@ pub extern "system" fn Java_com_example_dsh_1mobile_IrohNative_nativeClose(
 
 /// Read one exact owner's local state; only authenticated QUIC revocation returns revoked.
 #[no_mangle]
-pub extern "system" fn Java_com_example_dsh_1mobile_IrohNative_nativeStatus(
+pub extern "system" fn Java_com_fenewbee_dsh_1mobile_1next_IrohNative_nativeStatus(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     request_id: jlong,

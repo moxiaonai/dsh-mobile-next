@@ -273,7 +273,7 @@ pnpm publish --access public
 - **iOS 走 PWA 路径**，不分发原生 iOS App。
 - **Flutter 客户端尚未做跨网真机验证**。全局 VPN / TUN 与 fake-IP DNS 可能干扰 iroh 直连/中继。
 - **Android 原生库需自行构建**。`jniLibs/` 下的 `.so` 未入库（每个约 19 MB），复现方式见 [`native/iroh-android/build-android.sh`](native/iroh-android/build-android.sh)。
-- **客户端签名是 debug 的**，`applicationId` 仍为 `com.example.dsh_mobile`。正式发布前必须替换。
+- **客户端签名仍是 debug 的**。`applicationId` 已改为 `com.fenewbee.dsh_mobile_next`，但 `release` 构建仍复用 debug 签名。正式发布前必须配置独立的 release keystore。
 
 ---
 

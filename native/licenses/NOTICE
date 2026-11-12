@@ -35,8 +35,8 @@ Rust source copied from saya-ch/dsh-mobile, copyright 2026 Guangqi Zhang.
   License:   MIT — LICENSE and LICENSE.apache retained in the crate directory
 
 The only modification to the upstream Rust is JNI symbol renaming to match
-the existing Flutter package `com.example.dsh_mobile`. No Android application
-ID, signature, keystore or SDK installation was changed.
+the Flutter package `com.fenewbee.dsh_mobile_next`. No Android application
+ID, signature, keystore or SDK installation was changed by that rename.
 
 The Apache-2.0 license text for the DSH Mobile main repository is preserved in
 native/licenses/LICENSE.dsh-mobile.

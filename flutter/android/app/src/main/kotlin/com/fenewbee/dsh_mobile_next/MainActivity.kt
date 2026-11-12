@@ -1,4 +1,4 @@
-package com.example.dsh_mobile
+package com.fenewbee.dsh_mobile_next
 
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
