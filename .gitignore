@@ -115,6 +115,10 @@ DerivedData/
 /native/evidence/
 /native/.test-tmp/
 
+# ---------- 本地临时产物 ----------
+/out/
+/tmp-redact/
+
 # ---------- 日志 ----------
 *.log
 
