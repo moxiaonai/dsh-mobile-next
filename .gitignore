@@ -134,6 +134,10 @@ DerivedData/
 .env
 .env.*
 
+# npm 配置：项目级 .npmrc 可能包含 _authToken，绝不能提交
+.npmrc
+**/.npmrc
+
 *.pem
 *.key
 *.p12
