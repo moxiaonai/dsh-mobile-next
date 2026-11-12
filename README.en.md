@@ -4,6 +4,8 @@ English · [简体中文](README.md)
 
 > Take over and supervise DeepSeek Harness tasks running on your computer — from your phone.
 
+[![CI](https://github.com/moxiaonai/dsh-mobile-next/actions/workflows/ci.yml/badge.svg)](https://github.com/moxiaonai/dsh-mobile-next/actions/workflows/ci.yml)
+
 DSH Mobile is three pieces: a **DSH plugin** (desktop side, published to npm), a **Flutter client** (Android, with an iOS PWA path), and a **Rust native transport** (iroh, experimental). The plugin opens an HTTPS gateway on the computer with device-pairing auth. The phone connects over LAN or an encrypted remote channel and receives the **real DSH page** plus a mobile layout layer.
 
 This is not "the desktop chat UI shrunk down." The phone is a **pager for your agents**: one screen telling you what needs you, one-tap approval, voice or text steering, full transcript on demand.
@@ -229,9 +231,18 @@ The iroh channel adds further requirements: QUIC authenticates EndpointIds and p
 
 | Component | Tests | Status |
 | --- | --- | --- |
-| Plugin | 12 files / 140 cases | ✅ **147 passed, 2 skipped** (measured with vitest) |
-| Client | 29 files / 291 cases | Case count is static; `dart test` needs a writable Flutter SDK |
-| Native | Rust unit + integration | See `native/evidence/` (local evidence, not committed) |
+| Plugin | 12 files / 140 cases | ✅ **147 passed, 2 skipped** (measured with `pnpm test`) |
+| Native | `iroh-core` + `iroh-host` | ✅ **56 passed, 0 failed** (measured with `cargo test`) |
+| Client | 29 files / 291 cases | `flutter analyze` clean; `flutter test` runs in CI |
+
+```bash
+cd dsh-mobile-next && pnpm test          # plugin
+cd native && cargo test -p dsh-mobile-iroh-core -p dsh-mobile-iroh-host
+cd flutter && flutter analyze && flutter test
+```
+
+> The Android crate (`native/iroh-android`) only builds for Android targets,
+> so host-side `cargo test` / `cargo clippy` cover the default members only.
 
 ### Plugin verification scripts
 

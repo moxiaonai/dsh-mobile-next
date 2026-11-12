@@ -35,7 +35,9 @@ async fn main() -> anyhow::Result<()> {
     if !data_dir.is_absolute() {
         anyhow::bail!("data-dir must be absolute");
     }
-    let peer: EndpointId = peer_text.parse().map_err(|_| anyhow::anyhow!("bad endpoint id"))?;
+    let peer: EndpointId = peer_text
+        .parse()
+        .map_err(|_| anyhow::anyhow!("bad endpoint id"))?;
 
     let session = connect_with_options(
         &data_dir,

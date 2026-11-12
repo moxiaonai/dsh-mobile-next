@@ -4,6 +4,8 @@
 
 > 在手机上接管和监管运行在电脑上的 DeepSeek Harness 任务。
 
+[![CI](https://github.com/moxiaonai/dsh-mobile-next/actions/workflows/ci.yml/badge.svg)](https://github.com/moxiaonai/dsh-mobile-next/actions/workflows/ci.yml)
+
 DSH Mobile 由三部分组成：一个 **DSH 插件**（电脑端，发布到 npm）、一个 **Flutter 客户端**（Android，含 iOS PWA 路径）、以及一套 **Rust 原生传输层**（iroh，实验性）。插件在电脑上开一个带设备配对认证的 HTTPS 网关，手机通过局域网或加密远程通道接入，拿到的是**真实的 DSH 页面**加上一层移动布局。
 
 这不是「把桌面聊天界面缩小」。手机在这里是 agent 的**寻呼机**：一屏看清什么需要你、一键批准、语音或文字纠偏，完整转写按需展开。
@@ -228,9 +230,18 @@ iroh 通道额外要求：QUIC 用 EndpointId 认证并提供传输层重放保�
 
 | 组件 | 测试 | 状态 |
 | --- | --- | --- |
-| 插件 | 12 个文件 / 140 个用例 | ✅ **147 passed, 2 skipped**（vitest 实测） |
-| 客户端 | 29 个文件 / 291 个用例 | 用例静态统计；`dart test` 需可写的 Flutter SDK |
-| 原生 | Rust 单测 + 集成 | 见 [`native/evidence/`](native/evidence/)（本地证据，未入库） |
+| 插件 | 12 个文件 / 140 个用例 | ✅ **147 passed, 2 skipped**（`pnpm test` 实测） |
+| 原生 | `iroh-core` + `iroh-host` | ✅ **56 passed, 0 failed**（`cargo test` 实测） |
+| 客户端 | 29 个文件 / 291 个用例 | `flutter analyze` 无问题；`flutter test` 在 CI 中执行 |
+
+```bash
+cd dsh-mobile-next && pnpm test          # 插件
+cd native && cargo test -p dsh-mobile-iroh-core -p dsh-mobile-iroh-host
+cd flutter && flutter analyze && flutter test
+```
+
+> Android crate（`native/iroh-android`）只面向 Android 目标构建，
+> 因此宿主机侧的 `cargo test` / `cargo clippy` 只跑默认成员。
 
 ### 插件验证脚本
 

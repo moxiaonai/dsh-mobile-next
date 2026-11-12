@@ -1,24 +1,63 @@
-This repository includes a Rust host-side sidecar baseline adapted from the
-MIT-licensed dsh-tether reference project by zexadev.
+Third-party notices for DSH Mobile
+==================================
 
-The adapted source remains available under the MIT License. See
-`LICENSE.dsh-tether` for the preserved upstream license text and the source
-repository for the upstream project:
-https://github.com/zexadev/dsh-tether
+The repository as a whole is MIT (see the root LICENSE). The following
+third-party material is included, and the root MIT license does NOT replace
+the licenses on these portions.
 
-This repository's adaptation is experimental and does not claim production
-readiness, release support, or upstream endorsement.
 
-The Android WebView baseline under apps/mobile/android and its associated
-assets were adapted from saya-ch/dsh-mobile, copyright 2026 Guangqi Zhang,
-under the Apache License, Version 2.0. The original license is preserved in
-LICENSE.dsh-mobile. The root MIT license does not replace the license on
-those imported portions. See https://github.com/saya-ch/dsh-mobile.
+1. Rust native transport — native/iroh-host/, native/iroh-core/
+---------------------------------------------------------------
 
-The installed DSH Mobile module used by optional integration checks remains
-an external Apache-2.0 dependency; it is not copied or relicensed by a test.
+Adapted from saya-ch/dsh-mobile-iroh, copyright 2026 Guangqi Zhang.
 
-The profile-composition fixture integration/dsh-web-fixture.mjs adapts the
-Apache-2.0-licensed DSH Mobile development fixtures, copyright 2026 Guangqi
-Zhang. Its source notice and LICENSE.dsh-mobile retain those terms; the root
-MIT license does not replace them.
+  Source:    https://github.com/saya-ch/dsh-mobile-iroh
+  Commit:    b1d6ecdc5a22630e4edae07e44d2f0aa94a26fc9 (reviewed)
+  License:   MIT — preserved text in native/licenses/LICENSE
+
+Vendored `host/src`, `host/tests` -> iroh-host; `tether-core/src` ->
+iroh-core. Original Cargo manifests and lockfile retained. Upstream notices
+are not replaced, and no upstream endorsement is claimed.
+
+The MIT-licensed dsh-tether reference project by zexadev
+(https://github.com/zexadev/dsh-tether) is the origin of the sidecar baseline
+this upstream code descends from. Its preserved license text is in
+native/licenses/LICENSE.dsh-tether.
+
+
+2. Android transport — native/iroh-android/
+-------------------------------------------
+
+Rust source copied from saya-ch/dsh-mobile, copyright 2026 Guangqi Zhang.
+
+  Source:    https://github.com/saya-ch/dsh-mobile
+  Commit:    4422eb7ca6bb47f468950d5f1996ad3b38b21fa0 (2026-11-12 checkout)
+  License:   MIT — LICENSE and LICENSE.apache retained in the crate directory
+
+The only modification to the upstream Rust is JNI symbol renaming to match
+the existing Flutter package `com.example.dsh_mobile`. No Android application
+ID, signature, keystore or SDK installation was changed.
+
+The Apache-2.0 license text for the DSH Mobile main repository is preserved in
+native/licenses/LICENSE.dsh-mobile.
+
+
+3. Reference implementation — NOT included in this repository
+-------------------------------------------------------------
+
+saya-ch/dsh-mobile (https://github.com/saya-ch/dsh-mobile), Apache-2.0,
+copyright 2026 Guangqi Zhang, was studied as a research reference for protocol
+semantics and security constraints.
+
+No source code from that project is copied into `flutter/` or
+`dsh-mobile-next/` in this repository. Those directories are original work.
+The Apache-2.0 text is retained in native/licenses/LICENSE.dsh-mobile because
+it also covers the native/iroh-android/ portion described in section 2.
+
+
+4. Experimental status
+----------------------
+
+The native transport, and the iroh remote channel built on it, are
+experimental. Nothing in this repository claims production readiness, release
+support, or upstream endorsement.
