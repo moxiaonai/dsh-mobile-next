@@ -1,6 +1,6 @@
 {
   "name": "dsh-mobile-next",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "DSH 移动端接入插件：局域网 HTTPS + iroh 加密远程通道 + 独立设备配对",
   "type": "module",
   "main": "./lib/index.js",
