@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  网络安全配置。
+
+  背景：Android 9 (API 28) 起默认禁止明文 HTTP（cleartext），
+  WebView 访问 http:// 会直接失败并报 net::ERR_CLEARTEXT_NOT_PERMITTED。
+
+  但 DSH 的局域网网关是 **HTTPS**（私有 CA），远程通道也是 HTTPS。
+  明文 HTTP 只出现在两种场景：
+    1. 本地开发调试（adb reverse 到宿主机 127.0.0.1）
+    2. 用户显式配置的 HTTP 入口
+
+  因此这里**不全局放开明文**，而是只允许 loopback 与调试用的私有地址段，
+  其余仍强制 HTTPS。这保持了「默认安全」的姿态。
+
+  正式版应移除 http 段落，或只保留 localhost。
+-->
+<network-security-config>
+    <!-- 默认：禁止明文 -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <!-- ★ 打包进 App 的私有 CA。
+                 网关用插件自签的 CA，系统信任链里没有它 —— 只写 system 时
+                 WebView 打开详情页会直接白屏（ERR_CERT_AUTHORITY_INVALID），
+                 而 Dart 侧固定了 CA 反而正常，症状就是「列表能出来、
+                 点进详情打不开」。
+                 这里把 CA 声明为信任锚，WebView 与 HttpURLConnection 都会认它。 -->
+            <certificates src="@raw/dsh_ca" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- 仅调试用的本地回环与模拟器宿主地址允许明文 -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <!-- Android 模拟器访问宿主机的固定地址 -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

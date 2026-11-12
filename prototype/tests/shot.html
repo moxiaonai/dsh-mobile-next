@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<style>html,body{margin:0;padding:0;overflow:hidden;background:#fff}iframe{border:0;display:block;width:100vw;height:100vh}</style>
+</head><body>
+<iframe id="f" src="../index.html"></iframe>
+<script>
+var q = new URLSearchParams(location.search);
+var s = q.get('s') || 'home';
+var dark = q.get('dark') === '1';
+document.getElementById('f').onload = function () {
+  var w = this.contentWindow, S = w.Store;
+  if (dark) S.actions.setTheme('dark');
+  var go = {
+    home:      function () { S.actions.setTab('home'); },
+    sessions:  function () { S.actions.setTab('sessions'); },
+    devices:   function () { S.actions.setTab('devices'); },
+    task:      function () { S.actions.push('task', 't_payment', { openDock: true }); },
+    taskdone:  function () { S.actions.push('task', 't_login'); },
+    inbox:     function () { S.actions.push('inbox'); },
+    pairing:   function () { S.actions.push('pairing'); },
+    diag:      function () { S.actions.push('diagnostics'); },
+    appearance:function () { S.actions.push('appearance'); }
+  };
+  (go[s] || go.home)();
+};
+</script>
+</body></html>

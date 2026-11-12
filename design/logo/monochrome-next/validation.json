@@ -1,0 +1,31 @@
+{
+  "renderer": "Chrome headless; 2048px per icon -> Lanczos 1024px",
+  "icons": {
+    "black": {
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "opaque": true,
+      "grayscale": true,
+      "sha256": "4b451984f3f80a6229b54b2d67050bc386769c2742b9e535e6e3c32ae58ecc28"
+    },
+    "white": {
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "opaque": true,
+      "grayscale": true,
+      "sha256": "5bbccc205d1701058efe70a426b35e8aa64be4c0a89e550524ab71bda3483ca6"
+    }
+  },
+  "svg_xml": "valid",
+  "files_outside_output_unchanged": true,
+  "protected_existing_file_count": 579,
+  "source_reference": "Unavailable chat attachment; description-led redraw, not exact reproduction",
+  "small_size_limit": "NEXT is secondary; not fully readable at 32\u201348px. Use unbadged whale for very small UI glyphs.",
+  "platform_test": "Visual only, not installed on iOS or Android"
+}

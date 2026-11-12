@@ -1,0 +1,3 @@
+subjectAltName=DNS:iroh.test.localhost
+extendedKeyUsage=serverAuth
+basicConstraints=critical,CA:FALSE

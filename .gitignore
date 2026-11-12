@@ -1,0 +1,139 @@
+# ============================================================
+# DSH Mobile — 根仓库忽略规则
+#
+# 原则：只提交「能在他人机器上复现构建的最小集合」。
+# 构建产物、依赖缓存、本机路径、凭据、过程材料一律不进仓库。
+# ============================================================
+
+# ---------- 系统与编辑器 ----------
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.history/
+
+# ---------- 构建产物 ----------
+# Flutter：build/ 约 3.8 GB，.dart_tool/ 约 1.0 GB
+build/
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+coverage/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+app.*.symbols
+app.*.map.json
+.widget_preview/
+
+# Android / Gradle
+.gradle/
+android/local.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/.cxx/
+android/key.properties
+*.jks
+*.keystore
+
+# 预编译的 Android 原生库（每个约 19 MB，由 native/iroh-android 构建产出）
+# 复现方式见 README「构建 Android 原生库」。
+flutter/android/app/src/main/jniLibs/*/*.so
+
+# Rust：target/ 约 1.8 GB，.cargo-home/ 约 389 MB
+target/
+.cargo-home/
+.rustup-home/
+
+# Node / 打包产物
+node_modules/
+.pnpm-store/
+/dist/
+*.tgz
+*.tsbuildinfo
+# 注意：不要在此写裸 `lib/`，它会连带忽略 flutter/lib/ 整个源码树。
+# dsh-mobile-next/lib/ 已由 dsh-mobile-next/.gitignore 自行忽略。
+
+# 浏览器渲染缓存与 Python 缓存（design/logo 下生成图标时的副产物）
+.chrome/
+chrome-profile/
+GPUPersistentCache/
+__pycache__/
+*.pyc
+
+# macOS / Xcode
+Pods/
+macos/Flutter/ephemeral/
+macos/Flutter/GeneratedPluginRegistrant.swift
+*.xcuserstate
+xcuserdata/
+DerivedData/
+
+# ============================================================
+# 本地过程设计稿（不公开）
+#
+# /docs/       内部协作设计稿：产品命题、专家分工、任务书、评审记录、
+#              未实现规格。属过程材料，对开源读者是噪音。
+# /spike/      技术可行性实验：一次性验证脚本、运行日志、截图。
+# /reference/  第三方参考代码（saya-ch/dsh-mobile，Apache-2.0）的摘录。
+#              与本项目 MIT 不同源，留在仓库会造成许可证边界模糊。
+# ============================================================
+/docs/
+/spike/
+/reference/
+
+# 插件包内的过程文档（保留 remote-access.md 与面板截图）
+/dsh-mobile-next/docs/60-ui-redesign-task.md
+/dsh-mobile-next/docs/71-stack-and-release-plan.md
+
+# ============================================================
+# 本地验证脚手架（硬编码了作者本机路径与内网地址，他人无法运行）
+#
+# flutter/tool/ 下的 verify_* / e2e_* 脚本读取 ~/.dsh
+# 下的凭据；通用工具（schema 与图标生成）已在下文放行。
+# ============================================================
+/flutter/tool/verify_*.dart
+/flutter/tool/e2e_smoke.dart
+/flutter/tool/make_question.dart
+/flutter/tool/mint_cookie.dart
+/flutter/tool/demo_jobs.dart
+/flutter/tool/device_pair_probe.dart
+/flutter/tool/dev_proxy.mjs
+/flutter/tool/pairing-verify/
+/flutter/*-VERIFY.md
+/flutter/TASK-*.md
+/flutter/ANDROID-DEBUG.md
+
+# 验证证据与运行日志（含本机绝对路径、内网 IP）
+/native/evidence/
+/native/.test-tmp/
+
+# ---------- 日志 ----------
+*.log
+
+# ============================================================
+# 凭据与本机状态 —— 绝不允许进仓库
+# ============================================================
+.credentials.yaml
+.env
+.env.*
+
+*.pem
+*.key
+*.p12
+*.pfx
+*.srl
+*.csr
+
+# 例外：这两个 PEM 是「公开证书」，不含私钥，且构建/测试必需。
+#   flutter/assets/ca.pem          —— 打包进 APK 的私有 CA 证书（pubspec assets 引用）
+#   flutter/test/fixtures/iroh-tls —— TLS 固定测试用的自签 CA 与叶子证书
+!flutter/assets/ca.pem
+!flutter/test/fixtures/iroh-tls/*.pem

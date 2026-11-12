@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>客户端界面预览</title>
+<style>
+  :root {
+    --dsw-alias-bg-base: #ffffff;
+    --dsw-alias-border-subtle: #e4e7ec;
+    --dsw-alias-bg-sunken: #eef0f4;
+    --dsw-alias-bg-success-weak: #e8f5ec;
+    --dsw-alias-text-success: #166534;
+    --dsw-alias-text-danger: #b91c1c;
+    --dsw-alias-text-primary: #111827;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --dsw-alias-bg-base: #0f172a;
+      --dsw-alias-border-subtle: #334155;
+      --dsw-alias-bg-sunken: #1e293b;
+      --dsw-alias-bg-success-weak: #14321f;
+      --dsw-alias-text-success: #4ade80;
+      --dsw-alias-text-danger: #fca5a5;
+      --dsw-alias-text-primary: #f8fafc;
+    }
+    body { background: #0f172a; color: #f8fafc; }
+  }
+  body { font: 14px/1.6 -apple-system, system-ui, sans-serif; margin: 0; padding: 20px;
+         max-width: 420px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-text-primary, #111827); }
+</style>
+</head><body>
+<div id="mount"></div>
+<script>
+// 复刻 client.ts 的 STYLES（与源码保持一致）
+const STYLES = `
+.dshmn-section { display: flex; flex-direction: column; gap: 8px; }
+.dshmn-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  min-height: 44px; padding: 8px 12px; width: 100%;
+  background: var(--dsw-alias-bg-base, transparent);
+  border: 1px solid var(--dsw-alias-border-subtle, #e4e7ec);
+  border-radius: 10px; color: inherit; font: inherit; cursor: pointer;
+}
+.dshmn-chevron { font-size: 12px; opacity: .6; }
+.dshmn-panel { display: flex; flex-direction: column; gap: 12px; padding: 12px;
+  border: 1px solid var(--dsw-alias-border-subtle, #e4e7ec); border-radius: 12px; }
+.dshmn-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dshmn-title { font-weight: 600; }
+.dshmn-subtitle { font-weight: 600; font-size: 13px; opacity: .8; }
+.dshmn-badge { font-size: 12px; padding: 2px 8px; border-radius: 999px;
+  background: var(--dsw-alias-bg-sunken, #eef0f4); }
+.dshmn-badge--ok { background: var(--dsw-alias-bg-success-weak, #e8f5ec);
+  color: var(--dsw-alias-text-success, #166534); }
+.dshmn-meta { font-size: 13px; opacity: .75; display: flex; flex-direction: column; gap: 4px; }
+.dshmn-hint { font-size: 13px; opacity: .65; }
+.dshmn-mono { font-family: ui-monospace, monospace; font-size: 12px; }
+.dshmn-url { word-break: break-all; opacity: .6; }
+.dshmn-error { font-size: 13px; color: var(--dsw-alias-text-danger, #b91c1c); }
+.dshmn-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.dshmn-btn { min-height: 44px; padding: 8px 16px; border-radius: 10px;
+  border: 1px solid var(--dsw-alias-border-subtle, #e4e7ec);
+  background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.dshmn-btn:disabled { opacity: .45; cursor: not-allowed; }
+.dshmn-btn--primary { background: #2563EB; border-color: #2563EB; color: #fff; }
+.dshmn-btn--danger { color: var(--dsw-alias-text-danger, #b91c1c); }
+.dshmn-btn--small { min-height: 32px; padding: 4px 12px; font-size: 13px; }
+.dshmn-qr { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.dshmn-qr-img { width: 180px; height: 180px; background: #fff; border-radius: 12px; padding: 8px; }
+.dshmn-qr-img svg { width: 100%; height: 100%; display: block; }
+.dshmn-devices { display: flex; flex-direction: column; gap: 8px; }
+.dshmn-device { display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; font-size: 13px; padding: 6px 0;
+  border-top: 1px solid var(--dsw-alias-border-subtle, #e4e7ec); }
+`;
+const style = document.createElement('style');
+style.textContent = STYLES;
+document.head.appendChild(style);
+
+// 用真实数据渲染（模拟 host 返回）
+const status = {
+  state: 'running',
+  origin: 'https://192.168.1.5:3444',
+  caFingerprint: 'C2:12:80:48:F1:31:BE:2A:6F:21:B3:86:2A:26:F3:FB:B9:3D:56:AF',
+  listenPort: 3444,
+  selectedAddress: '192.168.1.5',
+  candidates: [{ interfaceName: 'en0', address: '192.168.1.5' }],
+};
+const devices = [
+  { deviceId: 'a82a769b', label: '我的 iPhone' },
+  { deviceId: 'c7f45029', label: 'Pixel 模拟器' },
+];
+
+function el(tag, props, ...children) {
+  const node = document.createElement(tag);
+  if (props) {
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'className') node.className = v;
+      else if (k === 'innerHTML') node.innerHTML = v;
+      else node.setAttribute(k, v);
+    }
+  }
+  for (const c of children) {
+    if (c === null || c === undefined) continue;
+    node.append(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return node;
+}
+
+const root = el('div', { className: 'dshmn-panel' },
+  el('div', { className: 'dshmn-row' },
+    el('span', { className: 'dshmn-title' }, '移动访问（局域网）'),
+    el('span', { className: 'dshmn-badge dshmn-badge--ok' }, '已开启'),
+  ),
+  el('div', { className: 'dshmn-meta' },
+    el('div', null, '地址：' + status.origin),
+    el('div', { className: 'dshmn-mono' }, 'CA 指纹：' + status.caFingerprint.slice(0, 17) + '…'),
+  ),
+  el('div', { className: 'dshmn-actions' },
+    el('button', { className: 'dshmn-btn' }, '关闭'),
+    el('button', { className: 'dshmn-btn dshmn-btn--primary' }, '生成配对二维码'),
+  ),
+  el('div', { className: 'dshmn-devices' },
+    el('div', { className: 'dshmn-subtitle' }, '已配对设备（' + devices.length + '）'),
+    ...devices.map(d => el('div', { className: 'dshmn-device' },
+      el('span', null, d.label),
+      el('button', { className: 'dshmn-btn dshmn-btn--danger dshmn-btn--small' }, '撤销'),
+    )),
+  ),
+);
+document.getElementById('mount').append(root);
+</script>
+</body></html>

@@ -1,0 +1,42 @@
+name: dsh_mobile
+description: DSH Mobile 客户端传输层 —— 双载具（HTTP unary + WebSocket mux）与配对。
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Material/Cupertino 自带文案的多语言（NavigationBar、对话框按钮等）。
+  # 缺了它，locale=zh 时 NavigationBar 会红屏：
+  #   "No MaterialLocalizations found"
+  # SDK 自带，无需联网下载。
+  flutter_localizations:
+    sdk: flutter
+  # 传输层刻意保持零运行时依赖：HttpTransport / MuxSocket 是自建抽象，
+  # 便于在纯 Dart VM 下单测，不引入 http/web_socket_channel。
+  meta: ^1.16.0
+  crypto: ^3.0.0
+  flutter_inappwebview: ^6.1.5
+  mobile_scanner: ^7.5.0
+  path_provider: ^2.1.6
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^5.0.0
+  flutter_lints: ^5.0.0
+  flutter_test:
+    sdk: flutter
+
+# Flutter 相关依赖留待 UI 层加入（webview_flutter / flutter_secure_storage 等）。
+# 传输层不依赖 Flutter，因此可以在 `dart test` 下独立验证。
+
+flutter:
+  # ⚠ 必须为 true，否则 Material Icons 字体（MaterialIcons-Regular.otf）
+  # 不会被打包进 APK，所有 Icons.* 都渲染成方框（tofu）。
+  # 这个字段缺失时构建**不会报错**，只在运行时表现为图标缺失。
+  uses-material-design: true
+  assets:
+    - assets/ca.pem

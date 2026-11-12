@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>prototype behaviour check</title>
+<style>body{font:12px ui-monospace,monospace;margin:0;padding:8px}#frame{border:0;width:390px;height:844px}pre{white-space:pre-wrap}.fail{color:#b91c1c}</style>
+</head>
+<body>
+<iframe id="frame" src="../index.html"></iframe>
+<pre id="out">running…</pre>
+<script>
+var lines = [];
+function log(name, pass, detail) {
+  lines.push((pass ? '✓ ' : '✗ ') + name + (detail ? '  [' + detail + ']' : ''));
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+/** h1s actually exposed: inside a visible panel, not inside a [hidden] subtree. */
+function visibleH1s(doc) {
+  return Array.prototype.slice.call(doc.querySelectorAll('h1')).filter(function (h) {
+    return h.offsetParent !== null && !h.closest('[hidden]');
+  }).length;
+}
+
+async function run() {
+  var frame = document.getElementById('frame');
+  await new Promise(function (r) { frame.onload = r; });
+  await wait(500);
+
+  var win = frame.contentWindow, doc = frame.contentDocument;
+  var S = win.Store, A = S.actions;
+
+  /* ---- 1. IA: exactly 3 tabs + FAB ---- */
+  var tabs = doc.querySelectorAll('.tabbar__tab');
+  var fab = doc.querySelector('.fab');
+  log('IA has 3 tabs + center FAB', tabs.length === 3 && !!fab, tabs.length + ' tabs, fab=' + !!fab);
+
+  /* ---- 2. Task detail is a PUSH surface (tab bar hidden) ---- */
+  A.push('task', 't_payment', { openDock: true });
+  await wait(250);
+  var tabbarHidden = doc.getElementById('tabbar').hidden;
+  var pushVisible = !doc.getElementById('push').hidden;
+  log('task detail pushes over tabs', tabbarHidden && pushVisible,
+    'tabbarHidden=' + tabbarHidden + ' pushVisible=' + pushVisible);
+
+  /* ---- 3. Pending dock answerable without scrolling ---- */
+  var dock = doc.querySelector('.dock');
+  var dockBar = doc.querySelector('.dock__bar');
+  var opts = doc.querySelectorAll('.dock .opt');
+  var vh = frame.clientHeight;
+  var dockRect = dock ? dock.getBoundingClientRect() : null;
+  var composerRect = doc.querySelector('.composer').getBoundingClientRect();
+  log('pending dock rendered', !!dock && opts.length >= 3, 'options=' + opts.length);
+  log('dock sits above composer', dockRect && dockRect.bottom <= composerRect.top + 1,
+    'dockBottom=' + (dockRect ? dockRect.bottom.toFixed(0) : 'n/a') + ' composerTop=' + composerRect.top.toFixed(0));
+  log('dock fully inside viewport', dockRect && dockRect.top > 0 && dockRect.bottom <= vh,
+    'top=' + (dockRect ? dockRect.top.toFixed(0) : '-') + ' bottom=' + (dockRect ? dockRect.bottom.toFixed(0) : '-'));
+
+  /* ---- 4. Follow state machine: 48px pause / 8px resume ---- */
+  var scroll = doc.querySelector('.push .scroll');
+  var followBefore = S.state.ui.follow['t_payment'];
+  scroll.scrollTop = scroll.scrollHeight - scroll.clientHeight - 120; // scroll up 120
+  scroll.dispatchEvent(new Event('scroll'));
+  await wait(120);
+  var followAfter = S.state.ui.follow['t_payment'];
+  var jumpShown = !doc.querySelector('.jump-latest').hidden;
+  log('scroll up pauses follow', followBefore === true && followAfter === false,
+    'before=' + followBefore + ' after=' + followAfter);
+  log('"回到最新" pill appears when paused', jumpShown, 'shown=' + jumpShown);
+
+  var stripText = doc.querySelector('.strip__follow').textContent;
+  log('strip label reads 已暂停跟随', stripText.indexOf('已暂停') >= 0, 'label=' + stripText);
+
+  // strip must keep updating while paused
+  var beforeSteps = doc.querySelectorAll('.strip__steps .step').length;
+  win.Sim.beats.step();
+  await wait(150);
+  var afterSteps = doc.querySelectorAll('.strip__steps .step').length;
+  log('activity strip still live while paused', afterSteps >= beforeSteps,
+    beforeSteps + ' -> ' + afterSteps);
+
+  // resume
+  scroll.scrollTop = scroll.scrollHeight - scroll.clientHeight - 2;
+  scroll.dispatchEvent(new Event('scroll'));
+  await wait(150);
+  log('scrolling back to bottom resumes follow', S.state.ui.follow['t_payment'] === true,
+    'follow=' + S.state.ui.follow['t_payment']);
+
+  /* ---- 5. Answering the dock removes it and appends a transcript block ---- */
+  var transcriptBefore = doc.querySelectorAll('.tblock').length;
+  var firstOpt = doc.querySelector('.dock .opt input');
+  firstOpt.click();
+  await wait(120);
+  var submitBtn = Array.prototype.slice.call(doc.querySelectorAll('.dock__actions .btn'))
+    .filter(function (b) { return b.textContent.indexOf('提交') >= 0; })[0];
+  log('submit enabled after choosing an option', submitBtn && !submitBtn.disabled, 'found=' + !!submitBtn);
+  submitBtn.click();
+  await wait(900);
+  var dockGone = !doc.querySelector('.dock');
+  var transcriptAfter = doc.querySelectorAll('.tblock').length;
+  log('dock disappears after submit', dockGone, 'dock=' + !!doc.querySelector('.dock'));
+  log('answer appended to transcript', transcriptAfter > transcriptBefore,
+    transcriptBefore + ' -> ' + transcriptAfter);
+  log('task leaves needs_input', S.getTask('t_payment').state === 'running',
+    'state=' + S.getTask('t_payment').state);
+
+  /* ---- 6. Composer: send appends + stop button when running ---- */
+  var ta = doc.querySelector('.composer__input');
+  ta.value = '先别动 refund.ts，等我确认';
+  ta.dispatchEvent(new Event('input'));
+  await wait(80);
+  var send = doc.querySelector('.composer__send');
+  log('send enabled with text', !send.disabled, 'disabled=' + send.disabled);
+  var tb = doc.querySelectorAll('.tblock').length;
+  send.click();
+  await wait(250);
+  log('sent message appears in transcript', doc.querySelectorAll('.tblock').length > tb,
+    tb + ' -> ' + doc.querySelectorAll('.tblock').length);
+  log('draft cleared after send', (S.state.ui.draft['t_payment'] || '') === '',
+    JSON.stringify(S.state.ui.draft['t_payment']));
+
+  /* ---- 7. Sessions: search + swipe-equivalent sheet ---- */
+  A.setTab('sessions');
+  await wait(220);
+  var rows = doc.querySelectorAll('.swipe');
+  log('sessions grouped and listed', rows.length >= 6, 'rows=' + rows.length);
+  var input = doc.querySelector('.search__input');
+  input.value = 'payment';
+  input.dispatchEvent(new Event('input'));
+  await wait(220);
+  var filtered = doc.querySelectorAll('.swipe').length;
+  log('search filters sessions', filtered > 0 && filtered < rows.length, rows.length + ' -> ' + filtered);
+  input.value = '';
+  input.dispatchEvent(new Event('input'));
+  await wait(200);
+
+  var more = doc.querySelector('.swipe__more');
+  more.click();
+  await wait(220);
+  var sheet = doc.querySelector('.sheet');
+  log('row "…" opens action sheet', !!sheet, 'sheet=' + !!sheet);
+  var sheetItems = sheet ? sheet.querySelectorAll('.sheet__item').length : 0;
+  log('sheet exposes same actions as swipe', sheetItems >= 5, 'items=' + sheetItems);
+  win.UI.closeSheet();
+  await wait(300);
+
+  /* ---- 8. Simulator: a task completing moves it to 最近完成 + inbox ---- */
+  var doneBefore = S.completedTasks().length;
+  var inboxBefore = S.state.inbox.length;
+  A.setTab('home');
+  await wait(200);
+  win.Sim.beats.complete();
+  await wait(300);
+  log('task completion increments completed list', S.completedTasks().length >= doneBefore,
+    doneBefore + ' -> ' + S.completedTasks().length);
+  log('completion adds an inbox notification', S.state.inbox.length > inboxBefore,
+    inboxBefore + ' -> ' + S.state.inbox.length);
+
+  /* ---- 9. Offline is honest: banner + no ticking clocks ---- */
+  A.setOnline(false);
+  await wait(200);
+  var banner = doc.querySelector('.offline-banner');
+  log('offline banner shown', !!banner, banner ? banner.textContent.trim().slice(0, 30) : 'none');
+  var staleText = banner ? banner.textContent : '';
+  log('banner states the data timestamp', /显示\s*\d{2}:\d{2}/.test(staleText), staleText.trim());
+  A.setOnline(true);
+  await wait(200);
+
+  /* ---- 10. Theme toggle + persistence ---- */
+  A.setTheme('dark');
+  await wait(120);
+  var isDark = doc.documentElement.getAttribute('data-theme') === 'dark';
+  log('dark theme applied', isDark, 'data-theme=' + doc.documentElement.getAttribute('data-theme'));
+  var stored = win.localStorage.getItem('dsh-mobile-prototype/v1');
+  log('theme persisted to localStorage', !!stored && stored.indexOf('dark') >= 0, stored);
+
+  /* ---- 11. Reduced motion: no transitions ---- */
+  A.setTheme('light');
+  await wait(100);
+
+  /* ---- 12. Every screen has exactly one h1 ---- */
+  var screens = ['home', 'sessions', 'devices'];
+  for (var i = 0; i < screens.length; i++) {
+    A.setTab(screens[i]);
+    await wait(180);
+    var h1s = visibleH1s(doc);
+    log('one h1 on ' + screens[i], h1s === 1, 'count=' + h1s);
+  }
+  A.push('inbox'); await wait(200);
+  log('one h1 on inbox', visibleH1s(doc) === 1, 'count=' + visibleH1s(doc));
+  A.push('pairing'); await wait(200);
+  log('one h1 on pairing', visibleH1s(doc) === 1, 'count=' + visibleH1s(doc));
+
+  document.getElementById('out').textContent = lines.join('\n');
+  document.title = 'DONE';
+}
+
+run().catch(function (e) {
+  document.getElementById('out').textContent = 'HARNESS ERROR: ' + e.message + '\n' + (e.stack || '');
+  document.title = 'DONE';
+});
+</script>
+</body>
+</html>

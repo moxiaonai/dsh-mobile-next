@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>prototype self-check</title>
+<style>
+  body { font: 12px ui-monospace, monospace; margin: 0; padding: 8px; background: #fff; }
+  #frame { border: 0; width: 375px; height: 812px; }
+  pre { white-space: pre-wrap; }
+  .fail { color: #b91c1c; }
+  .pass { color: #166534; }
+</style>
+</head>
+<body>
+<iframe id="frame" src="../index.html"></iframe>
+<pre id="out">running…</pre>
+<script>
+var WIDTHS = [375, 390, 430];
+var ROUTES = [
+  { name: 'home', go: function (S) { S.actions.setTab('home'); } },
+  { name: 'sessions', go: function (S) { S.actions.setTab('sessions'); } },
+  { name: 'devices', go: function (S) { S.actions.setTab('devices'); } },
+  { name: 'task:running', go: function (S) { S.actions.push('task', 't_payment', { openDock: true }); } },
+  { name: 'task:approval', go: function (S) { S.actions.push('task', 't_migration', { openDock: true }); } },
+  { name: 'task:done', go: function (S) { S.actions.push('task', 't_login'); } },
+  { name: 'inbox', go: function (S) { S.actions.push('inbox'); } },
+  { name: 'pairing', go: function (S) { S.actions.push('pairing'); } },
+  { name: 'diagnostics', go: function (S) { S.actions.push('diagnostics'); } },
+  { name: 'appearance', go: function (S) { S.actions.push('appearance'); } }
+];
+
+var lines = [];
+function log(s, cls) { lines.push((cls === 'fail' ? '✗ ' : cls === 'pass' ? '✓ ' : '  ') + s); }
+
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+async function run() {
+  var frame = document.getElementById('frame');
+  var out = document.getElementById('out');
+
+  for (var w = 0; w < WIDTHS.length; w++) {
+    var width = WIDTHS[w];
+    frame.style.width = width + 'px';
+    frame.style.height = (width === 430 ? 932 : 812) + 'px';
+    frame.src = '../index.html?w=' + width;
+    await new Promise(function (r) { frame.onload = r; });
+    await wait(350);
+
+    var win = frame.contentWindow;
+    var doc = frame.contentDocument;
+    var S = win.Store;
+
+    log('=== width ' + width + ' ===');
+
+    for (var r = 0; r < ROUTES.length; r++) {
+      var route = ROUTES[r];
+      // reset to a tab first so the push stack clears
+      S.actions.setTab('home');
+      await wait(30);
+      route.go(S);
+      await wait(180);
+
+      // 1. page-level horizontal overflow
+      var de = doc.scrollingElement;
+      var overflowX = de.scrollWidth - de.clientWidth;
+
+      // 2. any element wider than the viewport (excluding intentional scrollers)
+      var wide = [];
+      var all = doc.querySelectorAll('.app *');
+      for (var i = 0; i < all.length; i++) {
+        var n = all[i];
+        if (!n.offsetParent && n.tagName !== 'BODY') continue;
+        var r2 = n.getBoundingClientRect();
+        if (r2.width === 0) continue;
+        if (r2.right > width + 0.6 || r2.left < -0.6) {
+          var inScroller = n.closest('.scroll-x, .chips-row, .meta-row, pre, .code-block pre, .strip__steps, .dock__body, .swipe__actions');
+          if (!inScroller) wide.push(n.className || n.tagName);
+        }
+      }
+
+      // 3. tap targets
+      var small = [];
+      var clickable = doc.querySelectorAll('button, a[href], input, textarea, [role="button"], label.opt, summary');
+      for (var j = 0; j < clickable.length; j++) {
+        var c = clickable[j];
+        if (!c.offsetParent) continue;
+        var cr = c.getBoundingClientRect();
+        if (cr.width === 0 || cr.height === 0) continue;
+        var label = (c.getAttribute('aria-label') || c.textContent || c.tagName).trim().slice(0, 34);
+        if (cr.height < 43.5) small.push('h' + cr.height.toFixed(0) + ' ' + label);
+        else if (cr.width < 43.5 && c.tagName !== 'INPUT' && c.tagName !== 'TEXTAREA') small.push('w' + cr.width.toFixed(0) + ' ' + label);
+      }
+
+      var ok = overflowX <= 0 && wide.length === 0 && small.length === 0;
+      log(route.name + ': overflowX=' + overflowX +
+        ' wide=' + (wide.length ? wide.slice(0, 3).join('|') : '0') +
+        ' smallTargets=' + (small.length ? small.slice(0, 4).join(' ; ') : '0'), ok ? 'pass' : 'fail');
+    }
+  }
+
+  // 4. dark mode + font scaling spot checks
+  frame.style.width = '375px'; frame.style.height = '812px';
+  frame.src = '../index.html?dark=1';
+  await new Promise(function (r) { frame.onload = r; });
+  await wait(300);
+  var d2 = frame.contentDocument;
+  var S2 = frame.contentWindow.Store;
+  S2.actions.setTheme('dark');
+  S2.actions.setFontBase(20);
+  await wait(220);
+  var de2 = d2.scrollingElement;
+  log('dark + font20 overflowX=' + (de2.scrollWidth - de2.clientWidth), (de2.scrollWidth - de2.clientWidth) <= 0 ? 'pass' : 'fail');
+
+  // tab labels must hide at large font (spec §2.2)
+  var lbl = d2.querySelector('.tabbar__label');
+  var hidden = lbl && frame.contentWindow.getComputedStyle(lbl).display === 'none';
+  log('font20 tab labels hidden=' + !!hidden, hidden ? 'pass' : 'fail');
+
+  // 5. forbidden CSS
+  var css = await fetch('../styles.css').then(function (r) { return r.text(); });
+  log('gradient occurrences=' + (css.match(/gradient/gi) || []).length, (css.match(/gradient/gi) || []).length === 0 ? 'pass' : 'fail');
+  log('backdrop-filter occurrences=' + (css.match(/backdrop-filter/gi) || []).length, (css.match(/backdrop-filter/gi) || []).length === 0 ? 'pass' : 'fail');
+
+  // 6. no emoji in DOM
+  var bodyHtml = d2.body.innerHTML;
+  var emoji = bodyHtml.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu);
+  log('emoji in DOM=' + (emoji ? emoji.length + ' ' + emoji.slice(0, 5).join('') : '0'), !emoji ? 'pass' : 'fail');
+
+  out.textContent = lines.join('\n');
+  document.title = 'DONE';
+}
+
+run().catch(function (e) {
+  document.getElementById('out').textContent = 'HARNESS ERROR: ' + e.message + '\n' + e.stack;
+  document.title = 'DONE';
+});
+</script>
+</body>
+</html>

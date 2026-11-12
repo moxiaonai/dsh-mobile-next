@@ -1,0 +1,4 @@
+[workspace]
+resolver = "2"
+members = ["iroh-core", "iroh-host", "iroh-android"]
+default-members = ["iroh-core", "iroh-host"]

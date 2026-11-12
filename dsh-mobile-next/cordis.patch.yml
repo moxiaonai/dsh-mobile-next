@@ -1,0 +1,38 @@
+# dsh-mobile-next 的 bundle patch。
+#
+# 作用：把本插件作为一个 Host 插件插入 DSH 的 loader 树。
+# 不改 DSH 源码、不覆盖任何既有条目。
+#
+# 注入的服务：
+#   webServer  —— 读 DSH 的真实监听端口，注册回环管理路由
+#   connection —— **必需**：用它拿「带 launch token 的 URL」，
+#                 再交换出 DSH 自己的 `dsh-auth-*` Cookie。
+#
+# 为什么 connection 是必需的（实测踩过的坑）：
+#   DSH 的 Web 页面自己也校验认证。只做设备认证、不注入上游 Cookie 时，
+#   请求转发到 DSH 会被它拒绝，返回 "dsh web authentication required"。
+#   一开始误以为是自己会话校验失败，查了很久。
+#
+# 不注入 commands：本插件不用 /mobile 这类命令。
+- insert:
+    - id: mobile-access-next
+      name: dsh-mobile-next
+      inject: [webServer, connection]
+      config:
+        # 配置与状态文件都放 $DSH_HOME/mobile-access-next/
+        setupFile: !!js dshHomePath('mobile-access-next/setup.json')
+        controlFile: !!js dshHomePath('mobile-access-next/control.json')
+        stateFile: !!js dshHomePath('mobile-access-next/devices.json')
+
+        # 默认关闭：首次启用由用户在面板里显式开启。
+        # 避免装完插件就自动对外监听 —— 这是安全默认值。
+        initiallyEnabled: false
+
+        # 监听配置
+        listenPort: 3444
+        # 只允许回环，直到用户在面板里确认网卡
+        allowedCidrs: [127.0.0.0/8]
+
+        # TLS：managed = 插件自签私有 CA
+        tls:
+          mode: managed

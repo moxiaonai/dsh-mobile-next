@@ -1,0 +1,80 @@
+{
+  "project": "dsh-mobile-next",
+  "application_files_checked": 2323,
+  "application_content_unchanged": true,
+  "reference_limit": "Uploaded black whale image not attached or found in accessible project/reference files. Original redraw follows whale brand vocabulary, not exact source tracing.",
+  "checks": [
+    {
+      "file": "design/logo/next-whale-v2/a-app-icon-1024.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "bytes": 23237,
+      "sha256": "b914ef4324579c35b0f4aa52ac650609bd28515a96ec08a09f9cf09d0938d5ac",
+      "opaque": true
+    },
+    {
+      "file": "design/logo/next-whale-v2/a-forward-whale-black.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGBA",
+      "bytes": 31363,
+      "sha256": "55dc41eae186c8c2869ece893ebb4d2e8e4211567519196774dbd8aae4f23de8"
+    },
+    {
+      "file": "design/logo/next-whale-v2/a-forward-whale-blue.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGBA",
+      "bytes": 30248,
+      "sha256": "b9ca4d9679bc12e3fce0e12a3abfc25cd80c1feceeb8028805b01d32c5eb070d"
+    },
+    {
+      "file": "design/logo/next-whale-v2/b-app-icon-1024.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "bytes": 25517,
+      "sha256": "91da479432e7de8cd150bcb42b4bb9beff36c0ad09634d4636c414c28dda101e",
+      "opaque": true
+    },
+    {
+      "file": "design/logo/next-whale-v2/b-pocket-whale-blue.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGBA",
+      "bytes": 30862,
+      "sha256": "638304e21d3986c24802d038cc9516ac6a68a4e64642fba71b7eeed2195683e2"
+    },
+    {
+      "file": "design/logo/next-whale-v2/visual-preview.png",
+      "size": [
+        1800,
+        1250
+      ],
+      "mode": "RGB",
+      "bytes": 134598,
+      "sha256": "0d06ab73cb4d11128c025ff05003892b9ff9b95b8ace94bd082cefaa21be4c12"
+    },
+    {
+      "file": "design/logo/next-whale-v2/visual-quality-proof.png",
+      "size": [
+        1400,
+        720
+      ],
+      "mode": "RGB",
+      "bytes": 73870,
+      "sha256": "0490497a649f643640f239aaa8066681be620cc6ad2927babbed2f1ba2a2e75f"
+    }
+  ]
+}
