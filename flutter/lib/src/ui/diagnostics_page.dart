@@ -126,6 +126,7 @@ class DiagnosticsPage extends StatelessWidget {
     this.onCopyReport,
     this.advanced,
     this.title,
+    this.onBack,
   });
 
   /// `null` 表示尚未运行。
@@ -142,6 +143,12 @@ class DiagnosticsPage extends StatelessWidget {
 
   /// 页面标题；为空时用当前语言的默认值。
   final String? title;
+
+  /// 返回上一页；为空时不显示返回按钮。
+  ///
+  /// 诊断页是被设备页 push 上来的二级页，顶栏必须自带返回入口 ——
+  /// 否则用户只能靠系统手势，而在 tab 页上返回手势的语义是「退出 App」。
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -160,7 +167,29 @@ class DiagnosticsPage extends StatelessWidget {
             Space.s12,
           ),
           children: [
-            Text(title ?? strings('diag.connectTitle'), style: txt.h1),
+            Row(
+              children: [
+                if (onBack != null)
+                  IconButton(
+                    onPressed: onBack,
+                    icon: const Icon(Icons.chevron_left),
+                    color: t.textSecondary,
+                    tooltip: strings('common.back'),
+                    constraints: const BoxConstraints(
+                      minWidth: Hit.min,
+                      minHeight: Hit.min,
+                    ),
+                  ),
+                Expanded(
+                  child: Text(
+                    title ?? strings('diag.connectTitle'),
+                    style: txt.h1,
+                  ),
+                ),
+                // 有返回按钮时右侧补等宽占位，标题才会与下方内容左对齐
+                if (onBack != null) const SizedBox(width: Hit.min),
+              ],
+            ),
             const SizedBox(height: Space.s6),
             if (report != null) ...[
               _SummaryBanner(report: report!, t: t, txt: txt),

@@ -38,6 +38,7 @@ import 'src/transport/request_generation.dart';
 import 'src/ui/appearance_page.dart';
 import 'src/ui/back_navigation.dart';
 import 'src/ui/devices_page.dart';
+import 'src/ui/diagnostics_page.dart';
 import 'src/ui/job_center_page.dart';
 import 'src/ui/job_widgets.dart' show AppTheme, ErrorState;
 import 'src/ui/session_detail_page.dart';
@@ -242,12 +243,74 @@ class _ShellState extends State<_Shell> {
             devices: _deviceList(),
             onAdd: _openPairing,
             onReconnect: (_) => _reconnect(),
+            onDiagnostics: (d) => _openDiagnostics(d),
             onBack: () => Navigator.of(context).maybePop(),
           ),
         ),
       ),
     );
     if (mounted) setState(() {});
+  }
+
+  /// 打开连接诊断。
+  ///
+  /// 报告只由**本机可观测的事实**组装：网关连接、电脑可达性、电脑侧证书
+  /// 信任（App 拿不到 → 标「未检查」，不假装通过）；「手机路径」一律 info。
+  Future<void> _openDiagnostics(
+    PairedDevice device, {
+    bool replace = false,
+  }) async {
+    final strings = AppStrings.of(context);
+    final conn = _conn;
+
+    final connChecks = <DiagnosticCheck>[
+      DiagnosticCheck(
+        label: strings('diag.connState'),
+        status: conn == null ? CheckStatus.error : CheckStatus.ok,
+        detail: conn == null
+            ? strings('diag.connDown')
+            : '${conn.origin.host}:${conn.origin.port}',
+      ),
+      DiagnosticCheck(
+        label: strings('diag.deviceReachable'),
+        status: device.reachability == DeviceReachability.reachable
+            ? CheckStatus.ok
+            : CheckStatus.warning,
+        detail: device.reachability.label(strings),
+      ),
+      DiagnosticCheck(
+        label: strings('diag.tlsTrust'),
+        status: CheckStatus.info,
+        detail: strings('diag.tlsTrustHint'),
+      ),
+    ];
+
+    final report = DiagnosticReport(
+      generatedAt: DateTime.now(),
+      layers: [
+        DiagnosticLayer(title: strings('diag.connection'), checks: connChecks),
+        DiagnosticLayer(
+          title: strings('diag.phonePath'),
+          checks: [phonePathCheck(strings)],
+        ),
+      ],
+    );
+
+    if (!mounted) return;
+    final nav = Navigator.of(context);
+    final route = MaterialPageRoute<void>(
+      builder: (_) => DiagnosticsPage(
+        report: report,
+        onRun: () => _openDiagnostics(device, replace: true),
+        onBack: () => nav.maybePop(),
+      ),
+    );
+    // 「重新检查」用 pushReplacement：否则每点一次都压一层，返回要连按好几次
+    if (replace) {
+      await nav.pushReplacement<void, void>(route);
+    } else {
+      await nav.push<void>(route);
+    }
   }
 
   /// 点通知 → 打开对应会话（并把该条标记已读）。
