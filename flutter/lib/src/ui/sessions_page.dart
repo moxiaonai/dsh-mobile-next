@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import '../protocol/session.dart';
 import '../protocol/sessions.dart';
 import '../app_strings.dart';
+import 'cards.dart';
 import 'job_widgets.dart' show AppTheme, EmptyState, ErrorState;
 import 'tokens.dart';
 
@@ -189,17 +190,15 @@ class _SessionsPageState extends State<SessionsPage> {
                         style: txt.display,
                       ),
                       const Spacer(),
-                      _RoundIconButton(
+                      RoundIconButton(
                         icon: Icons.search,
                         tooltip: strings('sessions.searchAction'),
-                        tokens: t,
                         onTap: () => _searchFocus.requestFocus(),
                       ),
                       const SizedBox(width: Space.s4),
-                      _RoundIconButton(
+                      RoundIconButton(
                         icon: Icons.tune,
                         tooltip: strings('sessions.filter'),
-                        tokens: t,
                         onTap: () => _openFilterSheet(t, txt, strings),
                       ),
                     ],
@@ -452,6 +451,30 @@ class _SessionsPageState extends State<SessionsPage> {
     );
   }
 
+  /// 分组灰头。组名在「未归类」组是本地化的（协议层留空串）。
+  Widget _header(
+    AppStrings strings,
+    SessionGroup g, {
+    required bool expanded,
+    required bool forceExpand,
+    required bool animate,
+  }) {
+    final name = g.kind == SessionGroupKind.unassigned
+        ? strings('sessions.groupOther')
+        : g.title;
+    return GroupHeaderCard(
+      title: name,
+      count: g.sessions.length,
+      expanded: expanded,
+      onTap: forceExpand ? null : () => _toggleGroup(g.key),
+      animate: animate,
+      semanticsLabel: strings.withArgs(
+        expanded ? 'sessions.groupExpanded' : 'sessions.groupCollapsed',
+        {'name': name, 'n': g.sessions.length},
+      ),
+    );
+  }
+
   Widget _body(Tokens t, AppTextStyles txt, List<SessionGroup> groups) {
     final strings = AppStrings.of(context);
     if (_loading && _all.isEmpty) {
@@ -493,14 +516,11 @@ class _SessionsPageState extends State<SessionsPage> {
                   Space.s8,
                   0,
                 ),
-                child: _GroupHeader(
-                  group: g,
-                  count: g.sessions.length,
-                  collapsed: !forceExpand && _collapsed.contains(g.key),
-                  tokens: t,
-                  txt: txt,
-                  strings: strings,
-                  onToggle: forceExpand ? null : () => _toggleGroup(g.key),
+                child: _header(
+                  strings,
+                  g,
+                  expanded: forceExpand || !_collapsed.contains(g.key),
+                  forceExpand: forceExpand,
                   animate: !noAnimation,
                 ),
               ),
@@ -531,157 +551,6 @@ class _SessionsPageState extends State<SessionsPage> {
   }
 }
 
-/// 右上角圆形图标按钮（搜索 / 筛选）。
-class _RoundIconButton extends StatelessWidget {
-  const _RoundIconButton({
-    required this.icon,
-    required this.tooltip,
-    required this.tokens,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final Tokens tokens;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: tokens.bgCard,
-        shape: CircleBorder(side: BorderSide(color: tokens.borderSubtle)),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: SizedBox(
-            width: Hit.min,
-            height: Hit.min,
-            child: Icon(icon, size: 22, color: tokens.textPrimary),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 分组头。
-///
-/// 展开态：灰色组头（顶部圆角），下方接白色行卡；收起态：整卡一行，
-/// 左侧文件夹图标 + 分组名 + 数量 + 右箭头。
-class _GroupHeader extends StatelessWidget {
-  const _GroupHeader({
-    required this.group,
-    required this.count,
-    required this.collapsed,
-    required this.tokens,
-    required this.txt,
-    required this.strings,
-    required this.onToggle,
-    required this.animate,
-  });
-
-  final SessionGroup group;
-  final int count;
-  final bool collapsed;
-  final Tokens tokens;
-  final AppTextStyles txt;
-  final AppStrings strings;
-  final VoidCallback? onToggle;
-  final bool animate;
-
-  @override
-  Widget build(BuildContext context) {
-    // 未归类组的标题由 UI 本地化（协议层留空串）
-    final title = group.kind == SessionGroupKind.unassigned
-        ? strings('sessions.groupOther')
-        : group.title;
-
-    final semanticsLabel = strings.withArgs(
-      collapsed ? 'sessions.groupCollapsed' : 'sessions.groupExpanded',
-      {'name': title, 'n': count},
-    );
-    final radius = collapsed
-        ? Radii.rLg
-        : const BorderRadius.vertical(top: Radius.circular(Radii.lg));
-
-    return Semantics(
-      button: onToggle != null,
-      // ⚠ 只给 expanded，不同时给 onExpand —— Flutter 会抛
-      // "An expanded node cannot have an expand action"
-      expanded: !collapsed,
-      label: semanticsLabel,
-      child: Material(
-        color: collapsed ? tokens.bgCard : tokens.bgSunken,
-        borderRadius: radius,
-        child: InkWell(
-          onTap: onToggle,
-          borderRadius: radius,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 60),
-            padding: const EdgeInsets.symmetric(horizontal: Space.s5),
-            child: Row(
-              children: [
-                // ⚠ 这里不能写成 `Flexible(标题) ... Spacer() 箭头`：
-                // Flexible 是 flex 子项，会按 flex 分走一半自由空间，
-                // 剩下的才给 Spacer —— 箭头因此被拉离右边缘约 70dp。
-                // 正确做法：左侧整组用 Expanded 吃掉剩余空间，箭头直接收尾。
-                Expanded(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (collapsed) ...[
-                        Icon(
-                          Icons.folder_outlined,
-                          size: 22,
-                          color: tokens.textSecondary,
-                        ),
-                        const SizedBox(width: Space.s6),
-                      ],
-                      Flexible(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: txt.h3.copyWith(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 17,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: Space.s4),
-                      Text(
-                        '$count',
-                        style: txt.body.copyWith(
-                          fontSize: 15,
-                          color: tokens.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                AnimatedRotation(
-                  turns: collapsed ? -0.25 : 0,
-                  duration: animate
-                      ? const Duration(milliseconds: 150)
-                      : Duration.zero,
-                  curve: Curves.easeOut,
-                  child: Icon(
-                    Icons.expand_more,
-                    size: 22,
-                    color: tokens.textTertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _SessionRow extends StatelessWidget {
   const _SessionRow({
     required this.session,
@@ -705,103 +574,17 @@ class _SessionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (t, txt) = AppTheme.of(context);
-    final radius = last
-        ? const BorderRadius.vertical(bottom: Radius.circular(Radii.lg))
-        : BorderRadius.zero;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: Space.s8),
-      decoration: BoxDecoration(color: t.bgCard, borderRadius: radius),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: radius,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Space.s4,
-                  Space.s5,
-                  Space.s4,
-                  Space.s5,
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: t.bgSunken,
-                        borderRadius: Radii.rMd,
-                      ),
-                      child: Icon(
-                        _iconFor(session),
-                        size: 22,
-                        color: t.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(width: Space.s6),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Row(
-                            children: [
-                              if (session.running) ...[
-                                Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color: t.successDot,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(width: Space.s3),
-                              ],
-                              Expanded(
-                                child: Text(
-                                  session.title ?? _shortId(session.id),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: txt.body.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: Space.s1),
-                          Text(
-                            _subtitle(
-                              session,
-                              AppStrings.of(context),
-                              showPath: showPath,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: txt.caption.copyWith(color: t.textTertiary),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: Space.s4),
-                    Icon(Icons.chevron_right, size: 20, color: t.textTertiary),
-                  ],
-                ),
-              ),
-              // 分隔线只从标题左沿开始（图标瓦片右侧），iOS 列表的常规做法。
-              if (!last)
-                Container(
-                  height: 1,
-                  margin: const EdgeInsets.only(left: 76),
-                  color: t.borderSubtle,
-                ),
-            ],
-          ),
-        ),
+    return CardRow(
+      leadingIcon: _iconFor(session),
+      title: session.title ?? _shortId(session.id),
+      subtitle: cardSubtitle(
+        _subtitle(session, AppStrings.of(context), showPath: showPath),
+        txt,
+        t,
       ),
+      dotColor: session.running ? t.successDot : null,
+      onTap: onTap,
+      last: last,
     );
   }
 

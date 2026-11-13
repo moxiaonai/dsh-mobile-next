@@ -1,7 +1,8 @@
 /// 设置 / 外观页。对齐 `docs/10-ui-spec.md` §5.8。
 ///
 /// 关键规格：
-/// - Segmented 3 段，轨道 sunken，选中卡白 + `--e-1`；每段 min-height 44
+/// - Segmented 3 段，轨道 sunken，选中段墨色（与会话页 chips 同一套语言）；
+///   每段 min-height 44
 /// - Stepper：`[−]` 44×44、值 48 宽 tabular-nums、`[+]` 44×44；
 ///   边界处按钮 disabled（字号 12–32；缩放 80–125）
 /// - 字号生效**不重载页面**，不打断草稿
@@ -11,6 +12,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../app_strings.dart';
+import 'cards.dart';
 import 'job_widgets.dart' show AppTheme;
 import 'tokens.dart';
 
@@ -124,165 +126,141 @@ class AppearancePage extends StatelessWidget {
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(
-            Space.s7,
-            Space.s6,
-            Space.s7,
-            Space.s12,
-          ),
+          padding: const EdgeInsets.only(top: Space.s2, bottom: Space.s12),
           children: [
-            Text(title ?? s('appearance.title'), style: txt.h1),
-            const SizedBox(height: Space.s7),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Space.s8,
+                Space.s2,
+                Space.s8,
+                Space.s6,
+              ),
+              child: Text(title ?? s('appearance.title'), style: txt.display),
+            ),
 
             _label(s('appearance.theme'), t, txt),
-            _Segmented<ThemePreference>(
-              values: ThemePreference.values,
-              selected: settings.theme,
-              labelOf: (v) => themeLabel(s, v),
-              onChanged: (v) => onChanged(settings.copyWith(theme: v)),
+            CardSurface(
+              padding: const EdgeInsets.all(3),
+              child: _Segmented<ThemePreference>(
+                values: ThemePreference.values,
+                selected: settings.theme,
+                labelOf: (v) => themeLabel(s, v),
+                onChanged: (v) => onChanged(settings.copyWith(theme: v)),
+              ),
             ),
 
-            const SizedBox(height: Space.s8),
             _label(s('appearance.language'), t, txt),
-            _Segmented<AppLanguage>(
-              values: AppLanguage.values,
-              selected: settings.language,
-              labelOf: (v) => languageLabel(s, v),
-              onChanged: (v) => onChanged(settings.copyWith(language: v)),
+            CardSurface(
+              padding: const EdgeInsets.all(3),
+              child: _Segmented<AppLanguage>(
+                values: AppLanguage.values,
+                selected: settings.language,
+                labelOf: (v) => languageLabel(s, v),
+                onChanged: (v) => onChanged(settings.copyWith(language: v)),
+              ),
             ),
             Padding(
-              padding: const EdgeInsets.only(top: Space.s3),
-              child: Text(
-                s('appearance.language.hint'),
-                style: txt.caption,
-              ),
+              padding: const EdgeInsets.fromLTRB(Space.s8, Space.s3, Space.s8, 0),
+              child: Text(s('appearance.language.hint'), style: txt.caption),
             ),
 
-            const SizedBox(height: Space.s8),
             _label(s('appearance.font'), t, txt),
-            _StepperRow(
-              label: s('appearance.font.label'),
-              hint: s('appearance.font.hint'),
-              value: settings.fontBase.round().toString(),
-              canDec:
-                  settings.fontBase > AppearanceSettings.minFont,
-              canInc:
-                  settings.fontBase < AppearanceSettings.maxFont,
-              onDec: () => onChanged(
-                settings.copyWith(
-                  fontBase: (settings.fontBase - 1).clamp(
-                    AppearanceSettings.minFont,
-                    AppearanceSettings.maxFont,
+            CardSurface(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  _StepperRow(
+                    label: s('appearance.font.label'),
+                    hint: s('appearance.font.hint'),
+                    value: settings.fontBase.round().toString(),
+                    canDec: settings.fontBase > AppearanceSettings.minFont,
+                    canInc: settings.fontBase < AppearanceSettings.maxFont,
+                    onDec: () => onChanged(
+                      settings.copyWith(
+                        fontBase: (settings.fontBase - 1).clamp(
+                          AppearanceSettings.minFont,
+                          AppearanceSettings.maxFont,
+                        ),
+                      ),
+                    ),
+                    onInc: () => onChanged(
+                      settings.copyWith(
+                        fontBase: (settings.fontBase + 1).clamp(
+                          AppearanceSettings.minFont,
+                          AppearanceSettings.maxFont,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              onInc: () => onChanged(
-                settings.copyWith(
-                  fontBase: (settings.fontBase + 1).clamp(
-                    AppearanceSettings.minFont,
-                    AppearanceSettings.maxFont,
-                  ),
-                ),
+                  if (scaleSupported) ...[
+                    Container(
+                      height: 1,
+                      margin: const EdgeInsets.only(left: Space.s6),
+                      color: t.borderSubtle,
+                    ),
+                    _StepperRow(
+                      label: s('appearance.scale'),
+                      hint: s('appearance.scale.hint'),
+                      value: '${settings.scalePercent}%',
+                      canDec:
+                          settings.scalePercent > AppearanceSettings.minScale,
+                      canInc:
+                          settings.scalePercent < AppearanceSettings.maxScale,
+                      onDec: () => onChanged(
+                        settings.copyWith(
+                          scalePercent:
+                              (settings.scalePercent -
+                                      AppearanceSettings.scaleStep)
+                                  .clamp(
+                                    AppearanceSettings.minScale,
+                                    AppearanceSettings.maxScale,
+                                  ),
+                        ),
+                      ),
+                      onInc: () => onChanged(
+                        settings.copyWith(
+                          scalePercent:
+                              (settings.scalePercent +
+                                      AppearanceSettings.scaleStep)
+                                  .clamp(
+                                    AppearanceSettings.minScale,
+                                    AppearanceSettings.maxScale,
+                                  ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
 
-            if (scaleSupported) ...[
-              const SizedBox(height: Space.s6),
-              _StepperRow(
-                label: s('appearance.scale'),
-                hint: s('appearance.scale.hint'),
-                value: '${settings.scalePercent}%',
-                canDec:
-                    settings.scalePercent > AppearanceSettings.minScale,
-                canInc:
-                    settings.scalePercent < AppearanceSettings.maxScale,
-                onDec: () => onChanged(
-                  settings.copyWith(
-                    scalePercent: (settings.scalePercent -
-                            AppearanceSettings.scaleStep)
-                        .clamp(
-                          AppearanceSettings.minScale,
-                          AppearanceSettings.maxScale,
-                        ),
-                  ),
-                ),
-                onInc: () => onChanged(
-                  settings.copyWith(
-                    scalePercent: (settings.scalePercent +
-                            AppearanceSettings.scaleStep)
-                        .clamp(
-                          AppearanceSettings.minScale,
-                          AppearanceSettings.maxScale,
-                        ),
-                  ),
-                ),
-              ),
-            ],
-
-            const SizedBox(height: Space.s8),
             _label(s('appearance.motion'), t, txt),
-            _Segmented<MotionPreference>(
-              values: MotionPreference.values,
-              selected: settings.motion,
-              labelOf: (v) => motionLabel(s, v),
-              onChanged: (v) => onChanged(settings.copyWith(motion: v)),
+            CardSurface(
+              padding: const EdgeInsets.all(3),
+              child: _Segmented<MotionPreference>(
+                values: MotionPreference.values,
+                selected: settings.motion,
+                labelOf: (v) => motionLabel(s, v),
+                onChanged: (v) => onChanged(settings.copyWith(motion: v)),
+              ),
             ),
 
             if (onOpenDevices != null) ...[
-              const SizedBox(height: Space.s9),
               _label(s('devices.title'), t, txt),
-              InkWell(
+              CardRow(
+                leadingIcon: Icons.devices_outlined,
+                title: (deviceCount ?? 0) > 0
+                    ? s.withArgs('devices.pairedCount', {'n': deviceCount ?? 0})
+                    : s('devices.add'),
+                first: true,
+                last: true,
                 onTap: onOpenDevices,
-                borderRadius: Radii.rMd,
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: Hit.min),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: Space.s5,
-                    vertical: Space.s4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: t.bgCard,
-                    borderRadius: Radii.rMd,
-                    border: Border.all(color: t.borderSubtle),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.devices_outlined,
-                        size: 18,
-                        color: t.textSecondary,
-                      ),
-                      const SizedBox(width: Space.s4),
-                      Expanded(
-                        child: Text(
-                          (deviceCount ?? 0) > 0
-                              ? s.withArgs('devices.pairedCount', {
-                                  'n': deviceCount ?? 0,
-                                })
-                              : s('devices.add'),
-                          style: txt.body,
-                        ),
-                      ),
-                      Icon(
-                        Icons.chevron_right,
-                        size: 18,
-                        color: t.textTertiary,
-                      ),
-                    ],
-                  ),
-                ),
               ),
             ],
 
-            const SizedBox(height: Space.s9),
             _label(s('appearance.preview'), t, txt),
-            Container(
+            CardSurface(
               padding: const EdgeInsets.all(Space.s6),
-              decoration: BoxDecoration(
-                color: t.bgCard,
-                borderRadius: Radii.rMd,
-                border: Border.all(color: t.borderSubtle),
-              ),
               child: Text(
                 s('appearance.preview.sample'),
                 // 实时反映字号
@@ -290,16 +268,19 @@ class AppearancePage extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(height: Space.s9),
-            SizedBox(
-              height: Hit.min,
-              child: OutlinedButton(
-                onPressed: settings.isDefault ? null : onReset,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: t.textSecondary,
-                  side: BorderSide(color: t.borderSubtle),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Space.s8, Space.s12, Space.s8, 0),
+              child: SizedBox(
+                height: Hit.min,
+                child: OutlinedButton(
+                  onPressed: settings.isDefault ? null : onReset,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: t.textPrimary,
+                    side: BorderSide(color: t.borderSubtle),
+                    shape: const StadiumBorder(),
+                  ),
+                  child: Text(s('appearance.reset')),
                 ),
-                child: Text(s('appearance.reset')),
               ),
             ),
           ],
@@ -309,15 +290,20 @@ class AppearancePage extends StatelessWidget {
   }
 
   Widget _label(String text, Tokens t, AppTextStyles txt) => Padding(
-    padding: const EdgeInsets.only(bottom: Space.s3),
+    padding: const EdgeInsets.fromLTRB(
+      Space.s8,
+      Space.s8,
+      Space.s8,
+      Space.s3,
+    ),
     child: Text(
       text,
-      style: txt.chrome.copyWith(color: t.textSecondary),
+      style: txt.chrome.copyWith(color: t.textTertiary),
     ),
   );
 }
 
-/// 分段控件（spec：轨道 sunken，选中卡白 + e-1，每段 ≥44）。
+/// 分段控件（spec：轨道 sunken，选中段墨色，每段 ≥44）。
 class _Segmented<T> extends StatelessWidget {
   const _Segmented({
     required this.values,
@@ -336,10 +322,7 @@ class _Segmented<T> extends StatelessWidget {
     final (t, txt) = AppTheme.of(context);
     return Container(
       padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: t.bgSunken,
-        borderRadius: Radii.rMd,
-      ),
+      decoration: BoxDecoration(color: t.bgSunken, borderRadius: Radii.rMd),
       child: Row(
         children: [
           for (final v in values)
@@ -355,24 +338,13 @@ class _Segmented<T> extends StatelessWidget {
                     constraints: const BoxConstraints(minHeight: Hit.min),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: v == selected ? t.bgCard : Colors.transparent,
+                      color: v == selected ? t.textPrimary : Colors.transparent,
                       borderRadius: Radii.rSm,
-                      boxShadow: v == selected
-                          ? const [
-                              BoxShadow(
-                                color: Color(0x0F0F172A),
-                                blurRadius: 2,
-                                offset: Offset(0, 1),
-                              ),
-                            ]
-                          : null,
                     ),
                     child: Text(
                       labelOf(v),
                       style: txt.chrome.copyWith(
-                        color: v == selected
-                            ? t.textPrimary
-                            : t.textSecondary,
+                        color: v == selected ? t.bgCard : t.textSecondary,
                       ),
                     ),
                   ),
@@ -408,17 +380,13 @@ class _StepperRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (t, txt) = AppTheme.of(context);
-    return Container(
+    final strings = AppStrings.of(context);
+    return Padding(
       padding: const EdgeInsets.fromLTRB(
         Space.s6,
         Space.s3,
         Space.s3,
         Space.s3,
-      ),
-      decoration: BoxDecoration(
-        color: t.bgCard,
-        borderRadius: Radii.rMd,
-        border: Border.all(color: t.borderSubtle),
       ),
       child: Row(
         children: [
@@ -435,7 +403,13 @@ class _StepperRow extends StatelessWidget {
               ],
             ),
           ),
-          _stepButton(Icons.remove, canDec, onDec, t),
+          _stepButton(
+            Icons.remove,
+            canDec,
+            onDec,
+            t,
+            strings('appearance.decrease'),
+          ),
           SizedBox(
             width: 48,
             child: Text(
@@ -446,7 +420,13 @@ class _StepperRow extends StatelessWidget {
               ),
             ),
           ),
-          _stepButton(Icons.add, canInc, onInc, t),
+          _stepButton(
+            Icons.add,
+            canInc,
+            onInc,
+            t,
+            strings('appearance.increase'),
+          ),
         ],
       ),
     );
@@ -457,19 +437,19 @@ class _StepperRow extends StatelessWidget {
     bool enabled,
     VoidCallback onTap,
     Tokens t,
+    String tooltip,
   ) => SizedBox(
     width: Hit.min,
     height: Hit.min,
     child: IconButton(
       onPressed: enabled ? onTap : null,
       icon: Icon(icon, size: 18),
-      color: t.accent,
+      color: t.textPrimary,
       disabledColor: t.disabledText,
-      tooltip: icon == Icons.add ? '增加' : '减少',
+      tooltip: tooltip,
     ),
   );
 }
-
 
 // ── 枚举 → 多语言标签 ──
 //

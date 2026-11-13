@@ -11,6 +11,9 @@
 /// 3. 其他（空闲/历史）
 ///
 /// 后台命令降级为任务详情里的辅助信息，不再占主界面。
+///
+/// 视觉上与会话页共用 [cards.dart] 那套卡片语言：大标题 + 右上圆形按钮 +
+/// 灰色组头 + 白色行卡。
 library;
 
 import 'dart:async';
@@ -21,7 +24,8 @@ import '../protocol/session.dart';
 import '../notice_center.dart';
 import '../protocol/session_tasks.dart';
 import '../app_strings.dart';
-import 'job_widgets.dart' show AppTheme, EmptyState, ErrorState, PulseDot;
+import 'cards.dart';
+import 'job_widgets.dart' show AppTheme, EmptyState, ErrorState;
 import 'tokens.dart';
 
 /// 会话任务列表页。
@@ -43,6 +47,7 @@ class SessionTasksPage extends StatefulWidget {
   final void Function(SessionSummary s)? onOpen;
 
   final VoidCallback? onRefresh;
+
   /// 页面标题；为空时用当前语言的默认值。
   final String? title;
 
@@ -111,7 +116,9 @@ class _SessionTasksPageState extends State<SessionTasksPage> {
 
     final g = SessionTasks.group(_tasks);
     final noticeList = widget.notices?.items ?? const <Notice>[];
-    final hasAny = g.needsYou.isNotEmpty ||
+    final unread = widget.notices?.unreadCount ?? 0;
+    final hasAny =
+        g.needsYou.isNotEmpty ||
         g.active.isNotEmpty ||
         g.rest.isNotEmpty ||
         noticeList.isNotEmpty;
@@ -127,25 +134,48 @@ class _SessionTasksPageState extends State<SessionTasksPage> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(
-                    Space.s7,
+                    Space.s8,
+                    Space.s2,
+                    Space.s8,
                     Space.s6,
-                    Space.s7,
-                    Space.s4,
                   ),
                   child: Row(
                     children: [
-                      Text(widget.title ?? strings('tasks.title'), style: txt.h1),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.title ?? strings('tasks.title'),
+                            style: txt.display,
+                          ),
+                          if (_tasks.isNotEmpty) ...[
+                            const SizedBox(height: Space.s1),
+                            Text(
+                              strings.withArgs('tasks.count', {
+                                'n': _tasks.length,
+                              }),
+                              style: txt.caption,
+                            ),
+                          ],
+                        ],
+                      ),
                       const Spacer(),
-                      if (_tasks.isNotEmpty)
-                        Text(
-                          strings.withArgs('tasks.count', {'n': _tasks.length}),
-                          style: txt.caption,
+                      if (unread > 0)
+                        RoundIconButton(
+                          icon: Icons.done_all,
+                          tooltip: strings('inbox.markAllRead'),
+                          onTap: widget.onMarkAllNoticesRead,
                         ),
-                      if ((widget.notices?.unreadCount ?? 0) > 0)
-                        TextButton(
-                          onPressed: widget.onMarkAllNoticesRead,
-                          child: Text(strings('inbox.markAllRead')),
-                        ),
+                      if (unread > 0) const SizedBox(width: Space.s4),
+                      RoundIconButton(
+                        icon: Icons.refresh,
+                        tooltip: strings('common.refresh'),
+                        onTap: () {
+                          widget.onRefresh?.call();
+                          unawaited(_load());
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -166,11 +196,9 @@ class _SessionTasksPageState extends State<SessionTasksPage> {
                     itemCount: noticeList.length,
                     itemBuilder: (context, i) => _NoticeRow(
                       notice: noticeList[i],
+                      last: i == noticeList.length - 1,
                       onTap: () => widget.onOpenNotice?.call(noticeList[i]),
                     ),
-                  ),
-                  const SliverToBoxAdapter(
-                    child: SizedBox(height: Space.s6),
                   ),
                 ],
                 if (g.needsYou.isNotEmpty) ...[
@@ -194,166 +222,103 @@ class _SessionTasksPageState extends State<SessionTasksPage> {
     );
   }
 
+  /// 分区灰头。任务页的分区不可折叠 —— 位置固定，收起反而多一步。
   Widget _section(String title, int count) => SliverToBoxAdapter(
     child: Padding(
       padding: const EdgeInsets.fromLTRB(
-        Space.s7,
-        Space.s6,
-        Space.s7,
-        Space.s3,
+        Space.s8,
+        Space.s8,
+        Space.s8,
+        0,
       ),
-      child: Builder(
-        builder: (context) {
-          final (t, txt) = AppTheme.of(context);
-          return Row(
-            children: [
-              Text(title, style: txt.h2),
-              const SizedBox(width: Space.s3),
-              Container(
-                height: 20,
-                padding: const EdgeInsets.symmetric(horizontal: Space.s3),
-                decoration: BoxDecoration(
-                  color: t.bgSunken,
-                  borderRadius: Radii.rFull,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  '$count',
-                  style: txt.chrome.copyWith(color: t.textSecondary),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+      child: GroupHeaderCard(title: title, count: count),
     ),
   );
 
-  Widget _list(List<SessionTask> tasks) => SliverPadding(
-    padding: const EdgeInsets.symmetric(horizontal: Space.s7),
-    sliver: SliverList.separated(
-      itemCount: tasks.length,
-      separatorBuilder: (_, _) => const SizedBox(height: Space.s3),
-      itemBuilder: (context, i) => SessionTaskCard(
-        task: tasks[i],
-        onTap: () => widget.onOpen?.call(tasks[i].session),
-      ),
+  Widget _list(List<SessionTask> tasks) => SliverList.builder(
+    itemCount: tasks.length,
+    itemBuilder: (context, i) => SessionTaskCard(
+      task: tasks[i],
+      last: i == tasks.length - 1,
+      onTap: () => widget.onOpen?.call(tasks[i].session),
     ),
   );
 }
 
-/// 一个会话任务卡片。
+/// 一个会话任务卡片（白卡一行）。
 class SessionTaskCard extends StatelessWidget {
-  const SessionTaskCard({super.key, required this.task, this.onTap});
+  const SessionTaskCard({
+    super.key,
+    required this.task,
+    this.onTap,
+    this.last = false,
+  });
 
   final SessionTask task;
   final VoidCallback? onTap;
+
+  /// 是否本组最后一行（带底部圆角）。
+  final bool last;
 
   @override
   Widget build(BuildContext context) {
     final (t, txt) = AppTheme.of(context);
     final strings = AppStrings.of(context);
-    final style = _styleOf(task.kind, t, AppStrings.of(context));
+    final style = _styleOf(task.kind, t, strings);
 
     return Semantics(
       button: true,
       label: '${task.title}，${style.label}',
-      child: Material(
-        color: t.bgCard,
-        borderRadius: Radii.rLg,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: Radii.rLg,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 72),
-            padding: const EdgeInsets.fromLTRB(
-              Space.s7,
-              Space.s6,
-              Space.s7,
-              Space.s6,
-            ),
-            decoration: BoxDecoration(
-              borderRadius: Radii.rLg,
-              border: Border.all(
-                color: task.needsYou ? style.border : t.borderSubtle,
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: CardRow(
+        leadingIcon: _iconOf(task.kind),
+        title: task.title,
+        dotColor: task.needsYou
+            ? t.warnDot
+            : (task.kind == SessionTaskKind.running ? t.accent : null),
+        last: last,
+        onTap: onTap,
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: Space.s2),
+            Row(
               children: [
-                // 状态点：需要你 = 脉冲，其余 = 实心/空心
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: task.kind == SessionTaskKind.running
-                      ? PulseDot(color: style.dot)
-                      : _dot(style.dot, hollow: !task.needsYou),
-                ),
-                const SizedBox(width: Space.s5),
+                _chip(style.label, style.fg, style.bg, txt),
+                if (task.pendingQuestionCount > 1) ...[
+                  const SizedBox(width: Space.s2),
+                  Text(
+                    strings.withArgs('tasks.awaitingCount', {
+                      'n': task.pendingQuestionCount,
+                    }),
+                    style: txt.caption,
+                  ),
+                ],
+                const SizedBox(width: Space.s3),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        task.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: txt.body.copyWith(fontWeight: FontWeight.w500),
-                      ),
-                      // 「需要你」时把问题正文显示出来 —— 这是用户最想看的
-                      if (task.needsYou &&
-                          task.pendingQuestionSummary != null) ...[
-                        const SizedBox(height: Space.s2),
-                        Text(
-                          task.pendingQuestionSummary!,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: txt.caption.copyWith(color: t.textSecondary),
-                        ),
-                      ],
-                      const SizedBox(height: Space.s2),
-                      Row(
-                        children: [
-                          _chip(style.label, style.fg, style.bg, txt),
-                          if (task.pendingQuestionCount > 1) ...[
-                            const SizedBox(width: Space.s2),
-                            Text(
-                              strings.withArgs('tasks.awaitingCount', {'n': task.pendingQuestionCount}),
-                              style: txt.caption,
-                            ),
-                          ],
-                          const SizedBox(width: Space.s3),
-                          Flexible(
-                            child: Text(
-                              _meta(task),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: txt.caption,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                  child: Text(
+                    _meta(task),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: txt.caption.copyWith(color: t.textTertiary),
                   ),
                 ),
-                const SizedBox(width: Space.s3),
-                Icon(Icons.chevron_right, size: 18, color: t.textTertiary),
               ],
             ),
-          ),
+            // 「需要你」时把问题正文显示出来 —— 这是用户最想看的
+            if (task.needsYou && task.pendingQuestionSummary != null) ...[
+              const SizedBox(height: Space.s2),
+              Text(
+                task.pendingQuestionSummary!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: txt.caption.copyWith(color: t.textSecondary),
+              ),
+            ],
+          ],
         ),
       ),
     );
   }
-
-  Widget _dot(Color c, {bool hollow = false}) => Container(
-    width: 8,
-    height: 8,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      color: hollow ? null : c,
-      border: hollow ? Border.all(color: c, width: 1.5) : null,
-    ),
-  );
 
   Widget _chip(String label, Color fg, Color bg, AppTextStyles txt) => Container(
     height: 20,
@@ -365,6 +330,13 @@ class SessionTaskCard extends StatelessWidget {
       style: txt.chrome.copyWith(color: fg, fontSize: txt.fontBase * 0.7),
     ),
   );
+
+  static IconData _iconOf(SessionTaskKind kind) => switch (kind) {
+    SessionTaskKind.needsAnswer => Icons.help_outline,
+    SessionTaskKind.running => Icons.bolt_outlined,
+    SessionTaskKind.idle => Icons.check_circle_outline,
+    SessionTaskKind.dormant => Icons.history,
+  };
 
   static String _meta(SessionTask task) {
     final parts = <String>[];
@@ -388,39 +360,42 @@ class SessionTaskCard extends StatelessWidget {
     return '${(d.inDays / 30).floor()} 个月前';
   }
 
-  static _TaskStyle _styleOf(SessionTaskKind kind, Tokens t, AppStrings strings) =>
-      switch (kind) {
-        SessionTaskKind.needsAnswer => _TaskStyle(
-          // 分区标题已叫「需要你」，chip 换个说法避免同屏重复
-          label: strings('tasks.awaiting'),
-          fg: t.warn,
-          bg: t.warnWeakBg,
-          dot: t.warnDot,
-          border: t.warnDot,
-        ),
-        SessionTaskKind.running => _TaskStyle(
-          // 分区标题已叫「进行中」，chip 换个说法
-          label: strings('session.state.running'),
-          fg: t.accentWeakText,
-          bg: t.accentWeakBg,
-          dot: t.accent,
-          border: t.borderSubtle,
-        ),
-        SessionTaskKind.idle => _TaskStyle(
-          label: strings('session.state.idle'),
-          fg: t.textSecondary,
-          bg: t.bgSunken,
-          dot: t.textTertiary,
-          border: t.borderSubtle,
-        ),
-        SessionTaskKind.dormant => _TaskStyle(
-          label: strings('session.state.history'),
-          fg: t.textTertiary,
-          bg: t.bgSunken,
-          dot: t.textTertiary,
-          border: t.borderSubtle,
-        ),
-      };
+  static _TaskStyle _styleOf(
+    SessionTaskKind kind,
+    Tokens t,
+    AppStrings strings,
+  ) => switch (kind) {
+    SessionTaskKind.needsAnswer => _TaskStyle(
+      // 分区标题已叫「需要你」，chip 换个说法避免同屏重复
+      label: strings('tasks.awaiting'),
+      fg: t.warn,
+      bg: t.warnWeakBg,
+      dot: t.warnDot,
+      border: t.warnDot,
+    ),
+    SessionTaskKind.running => _TaskStyle(
+      // 分区标题已叫「进行中」，chip 换个说法
+      label: strings('session.state.running'),
+      fg: t.accentWeakText,
+      bg: t.accentWeakBg,
+      dot: t.accent,
+      border: t.borderSubtle,
+    ),
+    SessionTaskKind.idle => _TaskStyle(
+      label: strings('session.state.idle'),
+      fg: t.textSecondary,
+      bg: t.bgSunken,
+      dot: t.textTertiary,
+      border: t.borderSubtle,
+    ),
+    SessionTaskKind.dormant => _TaskStyle(
+      label: strings('session.state.history'),
+      fg: t.textTertiary,
+      bg: t.bgSunken,
+      dot: t.textTertiary,
+      border: t.borderSubtle,
+    ),
+  };
 }
 
 class _TaskStyle {
@@ -441,12 +416,17 @@ class _TaskStyle {
 
 /// 一条通知行（任务页内的时间线）。
 ///
-/// 未读用左侧圆点 + 加粗标题表达，不靠颜色单独承载信息。
+/// 未读用标题前的圆点 + 加粗标题表达，不靠颜色单独承载信息。
 class _NoticeRow extends StatelessWidget {
-  const _NoticeRow({required this.notice, required this.onTap});
+  const _NoticeRow({
+    required this.notice,
+    required this.onTap,
+    this.last = false,
+  });
 
   final Notice notice;
   final VoidCallback onTap;
+  final bool last;
 
   @override
   Widget build(BuildContext context) {
@@ -460,55 +440,25 @@ class _NoticeRow extends StatelessWidget {
       NoticeKind.failed => strings('inbox.failed'),
     };
 
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: Hit.min),
-        padding: const EdgeInsets.symmetric(
-          horizontal: Space.s7,
-          vertical: Space.s3,
-        ),
-        child: Row(
-          children: [
-            // 未读圆点；已读留空占位，保证文字左边对齐
-            SizedBox(
-              width: 12,
-              child: notice.read
-                  ? null
-                  : Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: t.accent,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-            ),
-            const SizedBox(width: Space.s3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$kindLabel · ${notice.title}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: txt.body.copyWith(
-                      fontWeight:
-                          notice.read ? FontWeight.w400 : FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    formatRelativeTime(strings, notice.at),
-                    style: txt.caption,
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, size: 16, color: t.textTertiary),
-          ],
-        ),
+    return CardRow(
+      leadingIcon: switch (notice.kind) {
+        NoticeKind.approval => Icons.verified_outlined,
+        NoticeKind.question => Icons.help_outline,
+        NoticeKind.turnDone => Icons.check_circle_outline,
+        NoticeKind.failed => Icons.error_outline,
+      },
+      title: '$kindLabel · ${notice.title}',
+      titleStyle: txt.body.copyWith(
+        fontWeight: notice.read ? FontWeight.w400 : FontWeight.w600,
       ),
+      subtitle: cardSubtitle(
+        formatRelativeTime(strings, notice.at),
+        txt,
+        t,
+      ),
+      dotColor: notice.read ? null : t.accent,
+      last: last,
+      onTap: onTap,
     );
   }
 }

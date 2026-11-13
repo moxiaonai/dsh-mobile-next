@@ -111,6 +111,7 @@ class AppStrings {
     'nav.settings': '设置',
     // 通用
     'common.retry': '重试',
+    'common.refresh': '刷新',
     'common.cancel': '取消',
     'common.close': '关闭',
     'common.back': '返回',
@@ -430,6 +431,7 @@ class AppStrings {
     'nav.inbox': 'Inbox',
     'nav.settings': 'Settings',
     'common.retry': 'Retry',
+    'common.refresh': 'Refresh',
     'common.cancel': 'Cancel',
     'common.close': 'Close',
     'common.back': 'Back',
