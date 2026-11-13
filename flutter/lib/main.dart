@@ -131,7 +131,8 @@ class _AppState extends State<_App> {
             theme: ThemeData(
               useMaterial3: true,
               brightness: brightness,
-              colorSchemeSeed: const Color(0xFF2563EB),
+              // 材质默认色也从蓝改成墨色：没显式写样式的控件不该再冒出蓝色
+              colorSchemeSeed: const Color(0xFF111827),
             ),
             builder: (context, child) {
               // 动效偏好：reduced 时禁用所有隐式动画
@@ -254,12 +255,76 @@ class _ShellState extends State<_Shell> {
             onAdd: _openPairing,
             onReconnect: (_) => _reconnect(),
             onDiagnostics: (d) => _openDiagnostics(d),
+            onRevokeAll: _revokeAllPairings,
             onBack: () => Navigator.of(context).maybePop(),
           ),
         ),
       ),
     );
     if (mounted) setState(() {});
+  }
+
+  /// 撤销本机全部配对：清空凭据、断开当前连接、回到配对页。
+  ///
+  /// 只清**本机**凭据；电脑侧设备列表里那条记录仍在，用户也可以在电脑的
+  /// 「移动访问」面板删。先弹确认 —— 这一步不可撤销。
+  Future<void> _revokeAllPairings() async {
+    final strings = AppStrings.of(context);
+    final (t, _) = AppTheme.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: t.bgCard,
+        title: Text(strings('devices.revokeAll')),
+        content: Text(strings('devices.revokeAllHint')),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: t.textSecondary),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(strings('common.cancel')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: t.danger,
+              foregroundColor: t.bgCard,
+              shape: const StadiumBorder(),
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(strings('devices.revokeAllConfirm')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final store = await createCredentialStoreAsync();
+    await store.clear();
+    if (!mounted) return;
+
+    // 先断开：不清连接的话界面还显示「已连接」，但凭据已经没了。
+    await _eventsSub?.cancel();
+    _eventsSub = null;
+    _eventsConn = null;
+    await _conn?.dispose();
+    _transport?.close();
+    if (!mounted) return;
+    setState(() {
+      _credentials = const [];
+      _conn = null;
+      _transport = null;
+      _jobs = null;
+      _questions = null;
+      _approvals = null;
+      _browser = null;
+      _sessionId = null;
+      _openSession = null;
+      _approvalList.clear();
+      _status = AppStrings.of(context)('conn.unpairedHint');
+      _error = null;
+    });
+    // 关掉设备页，落到配对页：没有凭据时留着空壳没有意义
+    Navigator.of(context).maybePop();
+    await _openPairing();
   }
 
   /// 打开连接诊断。
