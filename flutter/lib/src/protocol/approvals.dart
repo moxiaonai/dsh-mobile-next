@@ -62,6 +62,7 @@ class PendingApproval {
     required this.toolName,
     required this.reason,
     this.displayReason = const {},
+    this.command,
   });
 
   /// 所属会话（waterfall 帧的 `agentId`）。
@@ -81,6 +82,13 @@ class PendingApproval {
 
   /// 多语言原因。键是语言码（`en` / `zh`），值是文案。
   final Map<String, String> displayReason;
+
+  /// 待执行命令原文。
+  ///
+  /// 实测 `approval/request` 只带 `toolName` / `callId` / `reason` /
+  /// `displayReason`，**没有**命令文本；这里留成可空字段，协议哪天带上
+  /// 就能直接展示（UI 只在非空时渲染代码块，绝不编造命令）。
+  final String? command;
 
   /// 按语言取原因，回退到英文原文。
   String localizedReason([String language = 'zh']) {
@@ -122,6 +130,19 @@ class PendingApproval {
       }
     }
 
+    // 命令文本不是协议的一部分；两种可能的位置都试一下，拿不到就留空。
+    String? command;
+    final rawCommand = request['command'];
+    if (rawCommand is String && rawCommand.trim().isNotEmpty) {
+      command = rawCommand;
+    } else {
+      final args = request['args'];
+      if (args is Map) {
+        final inner = args['command'];
+        if (inner is String && inner.trim().isNotEmpty) command = inner;
+      }
+    }
+
     return PendingApproval(
       sessionId: agentId is String ? agentId : '',
       eventId: eventId,
@@ -129,6 +150,7 @@ class PendingApproval {
       toolName: toolName is String ? toolName : 'unknown',
       reason: reason is String ? reason : '',
       displayReason: display,
+      command: command,
     );
   }
 

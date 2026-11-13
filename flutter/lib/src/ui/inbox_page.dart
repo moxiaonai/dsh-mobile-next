@@ -89,6 +89,7 @@ class InboxPage extends StatefulWidget {
     required this.entries,
     this.onOpen,
     this.onMarkAllRead,
+    this.onBack,
     this.title,
   });
 
@@ -98,6 +99,11 @@ class InboxPage extends StatefulWidget {
   final void Function(InboxEntry e)? onOpen;
 
   final VoidCallback? onMarkAllRead;
+
+  /// 返回动作。通知页是 push 上来的二级页，必须自己给返回入口
+  /// （外层 tab 壳不提供 AppBar）。为空时仍尽量 `maybePop`。
+  final VoidCallback? onBack;
+
   /// 页面标题；为空时用当前语言的默认值。
   final String? title;
 
@@ -135,6 +141,18 @@ class _InboxPageState extends State<InboxPage> {
               ),
               child: Row(
                 children: [
+                  if (widget.onBack != null || Navigator.of(context).canPop())
+                    IconButton(
+                      onPressed: widget.onBack ??
+                          () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.chevron_left),
+                      color: t.textSecondary,
+                      tooltip: AppStrings.of(context)('common.back'),
+                      constraints: const BoxConstraints(
+                        minWidth: Hit.min,
+                        minHeight: Hit.min,
+                      ),
+                    ),
                   Text(widget.title ?? AppStrings.of(context)('inbox.title'), style: txt.h1),
                   const Spacer(),
                   if (widget.onMarkAllRead != null)

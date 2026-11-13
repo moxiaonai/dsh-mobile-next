@@ -7,6 +7,8 @@
 ///   边界处按钮 disabled（字号 12–32；缩放 80–125）
 /// - 字号生效**不重载页面**，不打断草稿
 /// - 页面缩放行只在原生能力声明时渲染（未声明则**整行不渲染**，不显示灰行）
+/// - 「恢复默认」始终可点（不置灰），点击先出二次确认 sheet，
+///   确认后才回调 `onReset` 并 toast —— 见 [_confirmReset]
 library;
 
 import 'package:flutter/material.dart';
@@ -78,11 +80,17 @@ class AppearanceSettings {
   static const int maxScale = 125;
   static const int scaleStep = 5;
 
+  /// 所有设置是否都是默认值。
+  ///
+  /// ⚠ 必须把 `language` 算进来：语言是设置页自己的一个字段，
+  /// 漏掉它会让「只改了语言」被判成「全是默认」——英文界面上
+  /// 「恢复默认」按钮因此永远灰着（用户反馈「这个按钮无效」）。
   bool get isDefault =>
       theme == ThemePreference.system &&
       fontBase == 16 &&
       scalePercent == 100 &&
-      motion == MotionPreference.system;
+      motion == MotionPreference.system &&
+      language == AppLanguage.system;
 }
 
 /// 设置页。
@@ -273,7 +281,10 @@ class AppearancePage extends StatelessWidget {
               child: SizedBox(
                 height: Hit.min,
                 child: OutlinedButton(
-                  onPressed: settings.isDefault ? null : onReset,
+                  // spec §5.8 / prototype：按钮始终可点，点击先出二次确认
+                  // sheet。原先 `isDefault ? null : onReset` 会把这个按钮
+                  // 变成灰色死按钮（见 `_confirmReset` 注释）。
+                  onPressed: () => _confirmReset(context, t, txt, s),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: t.textPrimary,
                     side: BorderSide(color: t.borderSubtle),
@@ -301,6 +312,72 @@ class AppearancePage extends StatelessWidget {
       style: txt.chrome.copyWith(color: t.textTertiary),
     ),
   );
+
+  /// 「恢复默认」的二次确认 sheet（spec §5.8）。
+  ///
+  /// 之前的实现有两个问题，合起来就是用户看到的「按钮无效」：
+  /// 1. `onPressed: settings.isDefault ? null : onReset` —— `isDefault`
+  ///    漏算语言，只改了语言时按钮被禁用，怎么点都没反应；
+  /// 2. 即使可点，也是立即生效，spec 要求的二次确认 sheet 根本不存在，
+  ///    用户没有「按下去了」的任何反馈。
+  ///
+  /// 现在始终可点：先出 sheet，确认后回调 [onReset] 并 toast。
+  Future<void> _confirmReset(
+    BuildContext context,
+    Tokens t,
+    AppTextStyles txt,
+    AppStrings s,
+  ) async {
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: t.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Space.s8,
+            Space.s6,
+            Space.s8,
+            Space.s4,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(s('appearance.reset.confirmTitle'), style: txt.h3),
+              const SizedBox(height: Space.s3),
+              Text(s('appearance.reset.confirmNote'), style: txt.caption),
+              const SizedBox(height: Space.s4),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.refresh, color: t.textSecondary),
+                title: Text(s('appearance.reset'), style: txt.body),
+                onTap: () => Navigator.of(sheetContext).pop(true),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+    onReset?.call();
+    if (!context.mounted) return;
+    // 恢复默认会把语言也拉回「跟随系统」，整个界面随即按系统语言重建；
+    // toast 也按恢复后的语言取文案，否则英文界面切回中文后还弹一句英文。
+    final nextLanguage = resolveLanguage(
+      AppLanguage.system,
+      WidgetsBinding.instance.platformDispatcher.locale,
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          AppStrings.forLanguage(nextLanguage)('appearance.reset.done'),
+        ),
+      ),
+    );
+  }
 }
 
 /// 分段控件（spec：轨道 sunken，选中段墨色，每段 ≥44）。

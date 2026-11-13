@@ -282,19 +282,22 @@ void main() {
       expect(addBtn.onPressed, isNull);
     });
 
-    testWidgets('默认状态下恢复按钮禁用', (tester) async {
+    testWidgets('恢复默认按钮始终可点（二次确认在点击后）', (tester) async {
       await tester.pumpWidget(
         host(
           AppearancePage(
             settings: const AppearanceSettings(),
             onChanged: (_) {},
+            onReset: () {},
           ),
         ),
       );
       final btn = tester.widget<OutlinedButton>(
         find.widgetWithText(OutlinedButton, '恢复默认'),
       );
-      expect(btn.onPressed, isNull);
+      // spec §5.8 / prototype：不置灰，点击先出确认 sheet。
+      // 之前默认状态下 onPressed 为 null，用户点的就是一颗死按钮。
+      expect(btn.onPressed, isNotNull);
     });
   });
 
@@ -309,6 +312,18 @@ void main() {
         expect(find.text(c.label(AppStrings.forLanguage(AppLanguage.zh))),
             findsOneWidget);
       }
+    });
+
+    testWidgets('通知页给得出返回入口', (tester) async {
+      var backed = 0;
+      await tester.pumpWidget(
+        host(InboxPage(entries: const [], onBack: () => backed++)),
+      );
+      // 二级页必须能回到上一页：标题左侧有返回箭头，点它触发 onBack
+      expect(find.byIcon(Icons.chevron_left), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.chevron_left));
+      await tester.pump();
+      expect(backed, 1);
     });
 
     testWidgets('不显示问题正文（脱敏）', (tester) async {

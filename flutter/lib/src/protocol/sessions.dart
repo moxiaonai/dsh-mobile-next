@@ -143,7 +143,7 @@ class WorkspaceSnapshot {
 }
 
 /// 筛选条件。
-enum SessionFilter { all, running, withAgent }
+enum SessionFilter { all, running, needsYou, withAgent }
 
 /// 会话列表服务。
 class SessionBrowser {
@@ -442,6 +442,8 @@ class SessionBrowser {
   ) => switch (f) {
     SessionFilter.all => sessions,
     SessionFilter.running => sessions.where((s) => s.running).toList(),
+    SessionFilter.needsYou =>
+      sessions.where((s) => s.pendingQuestions.isNotEmpty).toList(),
     SessionFilter.withAgent =>
       sessions.where((s) => s.agentAvailable).toList(),
   };

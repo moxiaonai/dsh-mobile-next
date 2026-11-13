@@ -41,8 +41,8 @@ import 'src/ui/devices_page.dart';
 import 'src/ui/diagnostics_page.dart';
 import 'src/ui/job_center_page.dart';
 import 'src/ui/job_widgets.dart' show AppTheme, ErrorState;
+import 'src/ui/inbox_page.dart';
 import 'src/ui/session_detail_page.dart';
-import 'src/ui/session_tasks_page.dart';
 import 'src/ui/sessions_page.dart';
 import 'src/ui/tokens.dart';
 
@@ -204,6 +204,16 @@ class _ShellState extends State<_Shell> {
   IoHttpTransport? _transport;
   final List<PendingApproval> _approvalList = [];
 
+  /// 正在提交决策的审批 eventId（该卡片按钮转圈，避免连点）。
+  String? _busyApproval;
+
+  /// `$events` 订阅所属的连接，以及订阅本身。
+  ///
+  /// 审批与提问都只从 `$events` 的 waterfall 帧来；每换一条连接就要重订，
+  /// 否则旧连接上的订阅会静默失效（收不到任何新帧）。
+  DshConnection? _eventsConn;
+  StreamSubscription<StreamEvent>? _eventsSub;
+
   /// 当前打开的会话详情（null = 在 tab 页）。
   SessionSummary? _openSession;
 
@@ -313,6 +323,76 @@ class _ShellState extends State<_Shell> {
     }
   }
 
+  /// 审批决策：允许 / 拒绝。
+  ///
+  /// 成功后立刻从列表移除（服务端消费有几秒延迟，等它刷新会让用户以为没点动），
+  /// 同时把通知中心里那条标为已读 —— 已经处理过的审批不该继续提醒。
+  Future<void> _decideApproval(
+    PendingApproval approval,
+    ApprovalDecision decision,
+  ) async {
+    final center = _approvals;
+    final strings = AppStrings.of(context);
+    if (center == null || _busyApproval != null) return;
+    setState(() => _busyApproval = approval.eventId);
+    try {
+      await center.respond(approval, decision);
+      if (!mounted) return;
+      setState(() {
+        _approvalList.removeWhere((a) => a.eventId == approval.eventId);
+        _notices.markRead(approval.eventId);
+        _busyApproval = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busyApproval = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(strings.withArgs('approval.failed', {'error': '$e'})),
+        ),
+      );
+    }
+  }
+
+  /// 打开通知中心（会话页右上铃铛）。
+  ///
+  /// 通知从任务页搬到这里：任务页已经并进会话列表，通知不该跟着消失 ——
+  /// 它记录的是「过去发生过什么」，与列表的「现在有什么」互补。
+  Future<void> _openInbox() async {
+    final nav = Navigator.of(context);
+    await nav.push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => InboxPage(
+          entries: [
+            for (final n in _notices.items)
+              InboxEntry(
+                id: n.id,
+                category: switch (n.kind) {
+                  NoticeKind.approval => InboxCategory.approval,
+                  NoticeKind.question => InboxCategory.question,
+                  NoticeKind.turnDone => InboxCategory.reply,
+                  NoticeKind.failed => InboxCategory.failure,
+                },
+                sessionId: n.sessionId,
+                sessionTitle: n.title,
+                at: n.at,
+                read: n.read,
+              ),
+          ],
+          title: AppStrings.of(context)('inbox.title'),
+          onMarkAllRead: () => setState(_notices.markAllRead),
+          onBack: () => nav.maybePop(),
+          onOpen: (e) {
+            final matches = _notices.items.where((n) => n.id == e.id);
+            final notice = matches.isEmpty ? null : matches.first;
+            nav.pop();
+            if (notice != null) _openNotice(notice);
+          },
+        ),
+      ),
+    );
+  }
+
   /// 点通知 → 打开对应会话（并把该条标记已读）。
   void _openNotice(Notice notice) {
     setState(() {
@@ -365,7 +445,7 @@ class _ShellState extends State<_Shell> {
     _pairingFlow ??= PairingFlow(store: store, trustedCaPem: _caPem);
     if (saved.isNotEmpty) {
       setState(() => _status = AppStrings.of(context)('conn.reconnectingPaired'));
-      await _reconnect();
+      await _reconnect(silent: true);
       debugPrint('[boot] 重连结果 conn=${_conn != null} sessionId=$_sessionId');
       if (_conn != null) return;
     }
@@ -495,6 +575,7 @@ class _ShellState extends State<_Shell> {
 
   @override
   void dispose() {
+    unawaited(_eventsSub?.cancel());
     _connectionRequests.invalidate();
     _pairingFlow?.dispose();
     _conn?.dispose();
@@ -538,7 +619,51 @@ class _ShellState extends State<_Shell> {
   /// 界面的「已连接」判据要求 `_jobs != null && _sessionId != null`，
   /// 而重连只拿到连接对象。这里把会话列表拉一次、选一个作为当前会话，
   /// 顺便预热 JobCenter 需要的 sessionId。
+  /// 订阅 `$events`（每条连接一次）。
+  ///
+  /// 曾经只有「编译期注入 cookie」那条死路径订阅过 `$events`，真实配对
+  /// 流程完全没订 —— 结果服务端明明挂着 pending 审批，手机端永远是空列表。
+  ///
+  /// 订阅建立时服务端会**重放**未结算的 waterfall，所以 App 启动时
+  /// 已经挂起的审批也能补看到。
+  void _subscribeEvents(DshConnection conn) {
+    if (identical(_eventsConn, conn)) return;
+    unawaited(_eventsSub?.cancel());
+    _eventsConn = conn;
+    final stream = conn.mux.openStream(
+      r'$events',
+      payload: const {'args': <String, Object?>{}},
+    );
+    _eventsSub = stream.events.listen((event) {
+      if (event is! StreamItem || !mounted) return;
+      final value = event.value;
+      if (value is! Map) return;
+      final frame = value.cast<String, Object?>();
+      final clientId = WaterfallExtractor.clientIdOf(frame);
+      if (clientId != null) {
+        _approvals?.setClientId(clientId);
+        return;
+      }
+      final approval = WaterfallExtractor.approval(frame);
+      if (approval == null) return;
+      setState(() {
+        if (_approvalList.any((a) => a.eventId == approval.eventId)) return;
+        _approvalList.add(approval);
+        _notices.add(
+          Notice(
+            id: approval.eventId,
+            kind: NoticeKind.approval,
+            sessionId: approval.sessionId,
+            title: approval.toolName,
+            at: DateTime.now(),
+          ),
+        );
+      });
+    });
+  }
+
   Future<void> _hydrateSessions(DshConnection conn) async {
+    _subscribeEvents(conn);
     try {
       final browser = _browser ?? SessionBrowser(unary: conn.unary, mux: conn.mux);
       // 加超时：unary 默认 30s，对用户来说就是「一直转圈」。
@@ -724,7 +849,10 @@ class _ShellState extends State<_Shell> {
   }
 
   /// 用第一台已配对设备重连。
-  Future<void> _reconnect() async {
+  ///
+  /// `silent`：启动时自动重连不弹「已重新连接」——那时 locale 还没加载完，
+  /// 弹出来的会是英文兜底文案，且用户本来就没点任何东西。
+  Future<void> _reconnect({bool silent = false}) async {
     final flow = _pairingFlow;
     if (flow == null || _credentials.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -771,7 +899,9 @@ class _ShellState extends State<_Shell> {
       // 重连后拉一次会话，填上 _sessionId（否则界面判据仍不满足）
       await _hydrateSessions(outcome.connection);
       if (!owns()) return;
-      messenger.showSnackBar(SnackBar(content: Text(reconnectedText)));
+      if (!silent) {
+        messenger.showSnackBar(SnackBar(content: Text(reconnectedText)));
+      }
     } else {
       final failed = outcome as PairingFailed;
       // ⚠ 重连失败必须把界面从「连接中」切走，否则用户看到的是无限转圈，
@@ -882,18 +1012,8 @@ class _ShellState extends State<_Shell> {
           : ErrorState(error: _error!, onRetry: _boot);
     } else {
       body = switch (_tab) {
-        0 => SessionTasksPage(
-          listSessions: _browser!.list,
-          onOpen: (s) => setState(() => _openSession = s),
-          // 通知并入任务页：两者回答同一个问题「有什么要我处理」
-          notices: _notices,
-          onOpenNotice: _openNotice,
-          onMarkAllNoticesRead: () {
-            setState(_notices.markAllRead);
-          },
-        ),
-        // 会话（中间 tab：最常用的入口放拇指最容易够到的位置）
-        1 => SessionsPage(
+        // 会话（唯一的主列表：按项目/按状态两个轴切换，不再有并行的任务页）
+        0 => SessionsPage(
           listSessions: _browser!.list,
           listWorkspaces: _browser!.workspaces,
           onOpen: (s) => setState(() => _openSession = s),
@@ -901,6 +1021,11 @@ class _ShellState extends State<_Shell> {
           onCreate: _conn == null ? null : _createSession,
           initialCollapsed: _collapsedGroups,
           onCollapsedChanged: _updateCollapsedGroups,
+          unreadNotices: _notices.unreadCount,
+          onOpenInbox: _openInbox,
+          approvals: _approvalList,
+          onDecideApproval: _decideApproval,
+          busyApprovalEventId: _busyApproval,
         ),
         _ => AppearancePage(
           settings: widget.appearance.toSettings(),
@@ -958,16 +1083,7 @@ class _ShellState extends State<_Shell> {
                 indicatorColor: Colors.transparent,
                 height: 64,
                 destinations: [
-                  // 任务（含通知角标）：回答「有什么要我处理」
-                  NavigationDestination(
-                    icon: Badge(
-                      isLabelVisible: _notices.unreadCount > 0,
-                      label: Text('${_notices.unreadCount}'),
-                      child: const Icon(Icons.task_alt),
-                    ),
-                    label: strings('nav.tasks'),
-                  ),
-                  // 会话：回答「我要找某个对话」
+                  // 会话：唯一的列表入口（找对话 / 看谁在等 / 改分组轴）
                   NavigationDestination(
                     icon: const Icon(Icons.forum_outlined),
                     label: strings('nav.sessions'),

@@ -15,11 +15,61 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../protocol/session.dart';
+import '../protocol/session_tasks.dart';
+import '../protocol/approvals.dart';
 import '../protocol/sessions.dart';
+import 'approval_widgets.dart';
 import '../app_strings.dart';
 import 'cards.dart';
 import 'job_widgets.dart' show AppTheme, EmptyState, ErrorState;
 import 'tokens.dart';
+
+/// 列表分组轴。
+///
+/// 两个轴回答不同的问题：`project` 是「这个对话属于哪个项目」，
+/// `state` 是「有哪些事在等我处理」。同一批会话，两种切法，
+/// 所以只保留一个页面 + 一个切换器，不再拆成两个 tab。
+enum SessionGrouping {
+  project,
+  state;
+
+  String labelKey() => switch (this) {
+    SessionGrouping.project => 'sessions.groupByProject',
+    SessionGrouping.state => 'sessions.groupByState',
+  };
+}
+
+/// 渲染用的分组（与协议层的 `SessionGroup` 解耦）。
+///
+/// `project` 轴由 `SessionBrowser.group` 产出，`state` 轴由 `SessionTasks`
+/// 的分类产出 —— 两个轴共用同一套组头/行卡渲染。
+class _ListGroup {
+  const _ListGroup({
+    required this.key,
+    required this.sessions,
+    this.title = '',
+    this.unassigned = false,
+    this.state,
+    this.icon,
+  });
+
+  /// 稳定身份（折叠状态以它为键）。
+  final String key;
+
+  final List<SessionSummary> sessions;
+
+  /// `project` 轴的组名；`unassigned` 与 `state` 轴为空串，由 UI 本地化。
+  final String title;
+
+  /// 是否「未归类」组（标题需要本地化）。
+  final bool unassigned;
+
+  /// `state` 轴的分类；非空即状态组。
+  final SessionTaskKind? state;
+
+  /// 收起态整卡一行的左图标。
+  final IconData? icon;
+}
 
 /// 会话列表页。
 class SessionsPage extends StatefulWidget {
@@ -32,6 +82,11 @@ class SessionsPage extends StatefulWidget {
     this.title,
     this.initialCollapsed,
     this.onCollapsedChanged,
+    this.unreadNotices = 0,
+    this.onOpenInbox,
+    this.approvals = const [],
+    this.onDecideApproval,
+    this.busyApprovalEventId,
   });
 
   final Future<List<SessionSummary>> Function() listSessions;
@@ -54,6 +109,25 @@ class SessionsPage extends StatefulWidget {
   /// 折叠集合变化时回调（外层负责持久化）。
   final ValueChanged<Set<String>>? onCollapsedChanged;
 
+  /// 未读通知数（右上铃铛角标）。
+  final int unreadNotices;
+
+  /// 打开通知中心；为 null 时不显示铃铛。
+  final VoidCallback? onOpenInbox;
+
+  /// 待审批请求，置顶展示。
+  ///
+  /// 审批比会话更急：会话是「可以去看」，审批是「不表态就卡住」。
+  /// 所以它排在所有分组之前，且不受筛选/搜索影响 —— 搜索会话不该把
+  /// 一条等待审批的危险操作藏起来。
+  final List<PendingApproval> approvals;
+
+  /// 审批决策回调；为 null 时两个按钮都禁用（只读）。
+  final void Function(PendingApproval a, ApprovalDecision d)? onDecideApproval;
+
+  /// 正在提交的审批 eventId（该卡片按钮转圈禁用）。
+  final String? busyApprovalEventId;
+
   @override
   State<SessionsPage> createState() => _SessionsPageState();
 }
@@ -68,6 +142,7 @@ class _SessionsPageState extends State<SessionsPage> {
   Object? _error;
   String _query = '';
   SessionFilter _filter = SessionFilter.all;
+  SessionGrouping _grouping = SessionGrouping.project;
   final _searchController = TextEditingController();
   final _searchFocus = FocusNode();
 
@@ -75,7 +150,7 @@ class _SessionsPageState extends State<SessionsPage> {
   ///
   /// 缓存它而不是每次 build 重算：收起一个组只改 `_collapsed`，
   /// 不该顺带把上百个会话重新分组。
-  List<SessionGroup> _groups = const [];
+  List<_ListGroup> _groups = const [];
 
   /// 折叠的分组键（`SessionGroup.key`，不用标题 —— 标题会变）。
   late Set<String> _collapsed;
@@ -87,7 +162,10 @@ class _SessionsPageState extends State<SessionsPage> {
     unawaited(_load());
   }
 
-  /// 唯一的重算入口：筛选 → 分组 → 搜索。
+  /// 唯一的重算入口：筛选 → 搜索 → 分组。
+  ///
+  /// 搜索放在分组**之前**：命中集合先收敛，组头的计数才是「命中多少」，
+  /// 不会出现「组头写 83、展开只有 1 行」的误导。
   void _recompute() {
     // 过滤规则：
     //   1. blank：DSH 打开后渲染欢迎页而非对话，像坏页面
@@ -100,10 +178,66 @@ class _SessionsPageState extends State<SessionsPage> {
         .where((s) => !s.blank && !archived.contains(s.id))
         .toList();
     final filtered = SessionBrowser.filter(visible, _filter);
-    final grouped = SessionBrowser.group(filtered, _snapshot.items);
-    _groups = _query.trim().isEmpty
-        ? grouped
-        : SessionBrowser.searchGroups(grouped, _query);
+    final q = _query.trim();
+
+    // 两个轴对搜索的处理不同：
+    // - 项目轴保留「搜到工作区名就整组留下」的语义（用户搜的是项目）
+    // - 状态轴没有组名可搜，直接筛会话
+    if (_grouping == SessionGrouping.project) {
+      final grouped = SessionBrowser.group(filtered, _snapshot.items);
+      final searched = q.isEmpty
+          ? grouped
+          : SessionBrowser.searchGroups(grouped, q);
+      _groups = [
+        for (final g in searched)
+          _ListGroup(
+            key: g.key,
+            title: g.title,
+            unassigned: g.kind == SessionGroupKind.unassigned,
+            sessions: g.sessions,
+            icon: g.kind == SessionGroupKind.unassigned
+                ? Icons.inbox_outlined
+                : Icons.folder_outlined,
+          ),
+      ];
+    } else {
+      final searched = q.isEmpty
+          ? filtered
+          : SessionBrowser.search(filtered, q);
+      _groups = _stateGroups(searched);
+    }
+  }
+
+  /// 按状态分组：需要你 / 进行中 / 空闲 / 历史。
+  ///
+  /// 分类规则复用 `SessionTasks` —— 任务页删掉后它只剩这一个用途，
+  /// 但规则只该有一份：两个入口对「需要你」的判定必须一致。
+  List<_ListGroup> _stateGroups(List<SessionSummary> sessions) {
+    final buckets = <SessionTaskKind, List<SessionSummary>>{};
+    for (final task in SessionTasks.build(sessions)) {
+      (buckets[task.kind] ??= <SessionSummary>[]).add(task.session);
+    }
+    const order = [
+      SessionTaskKind.needsAnswer,
+      SessionTaskKind.running,
+      SessionTaskKind.idle,
+      SessionTaskKind.dormant,
+    ];
+    return [
+      for (final kind in order)
+        if (buckets[kind]?.isNotEmpty ?? false)
+          _ListGroup(
+            key: 'state:${kind.name}',
+            state: kind,
+            sessions: buckets[kind]!,
+            icon: switch (kind) {
+              SessionTaskKind.needsAnswer => Icons.help_outline,
+              SessionTaskKind.running => Icons.bolt_outlined,
+              SessionTaskKind.idle => Icons.check_circle_outline,
+              SessionTaskKind.dormant => Icons.history,
+            },
+          ),
+    ];
   }
 
   /// 切换分组折叠。**不重算分组**。
@@ -196,6 +330,18 @@ class _SessionsPageState extends State<SessionsPage> {
                         onTap: () => _searchFocus.requestFocus(),
                       ),
                       const SizedBox(width: Space.s4),
+                      if (widget.onOpenInbox != null) ...[
+                        Badge(
+                          isLabelVisible: widget.unreadNotices > 0,
+                          label: Text('${widget.unreadNotices}'),
+                          child: RoundIconButton(
+                            icon: Icons.notifications_outlined,
+                            tooltip: strings('nav.inbox'),
+                            onTap: widget.onOpenInbox,
+                          ),
+                        ),
+                        const SizedBox(width: Space.s4),
+                      ],
                       RoundIconButton(
                         icon: Icons.tune,
                         tooltip: strings('sessions.filter'),
@@ -334,45 +480,99 @@ class _SessionsPageState extends State<SessionsPage> {
 
   Widget _chips(Tokens t, AppTextStyles txt, AppStrings strings) {
     final items = [
-      (SessionFilter.all, AppStrings.of(context)('sessions.all')),
-      (SessionFilter.running, AppStrings.of(context)('session.state.running')),
-      (SessionFilter.withAgent, AppStrings.of(context)('sessions.withAgent')),
+      (SessionFilter.all, strings('sessions.all')),
+      (SessionFilter.running, strings('session.state.running')),
+      // 「需要你」= 有未答提问。它是会话页最该一键跳到的筛选，
+      // 原先只有任务页有这个概念。
+      (SessionFilter.needsYou, strings('tasks.needsYou')),
+      (SessionFilter.withAgent, strings('sessions.withAgent')),
     ];
     return SizedBox(
       height: 40,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: Space.s8),
-        itemCount: items.length,
-        separatorBuilder: (_, _) => const SizedBox(width: Space.s5),
-        itemBuilder: (context, i) {
-          final (f, label) = items[i];
-          final on = _filter == f;
-          return Center(
-            child: Material(
-              color: on ? t.textPrimary : t.bgSunken,
-              borderRadius: Radii.rFull,
-              child: InkWell(
-                onTap: () => setState(() {
-                  _filter = f;
-                  _recompute();
-                }),
-                borderRadius: Radii.rFull,
-                child: Container(
-                  height: 40,
-                  padding: const EdgeInsets.symmetric(horizontal: Space.s9),
-                  alignment: Alignment.center,
-                  child: Text(
-                    label,
-                    style: txt.body.copyWith(
-                      color: on ? t.bgCard : t.textPrimary,
+      child: Row(
+        children: [
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(
+                left: Space.s8,
+                right: Space.s4,
+              ),
+              itemCount: items.length,
+              separatorBuilder: (_, _) => const SizedBox(width: Space.s5),
+              itemBuilder: (context, i) {
+                final (f, label) = items[i];
+                final on = _filter == f;
+                return Center(
+                  child: Material(
+                    color: on ? t.textPrimary : t.bgSunken,
+                    borderRadius: Radii.rFull,
+                    child: InkWell(
+                      onTap: () => setState(() {
+                        _filter = f;
+                        _recompute();
+                      }),
+                      borderRadius: Radii.rFull,
+                      child: Container(
+                        height: 40,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: Space.s9,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          label,
+                          style: txt.body.copyWith(
+                            color: on ? t.bgCard : t.textPrimary,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
-          );
-        },
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: Space.s8),
+            child: _groupingPill(t, txt, strings),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 分组轴切换：一个 40 高的胶囊，显示的是「切过去之后是什么」。
+  Widget _groupingPill(Tokens t, AppTextStyles txt, AppStrings strings) {
+    final next = _grouping == SessionGrouping.project
+        ? SessionGrouping.state
+        : SessionGrouping.project;
+    return Material(
+      color: t.bgSunken,
+      borderRadius: Radii.rFull,
+      child: InkWell(
+        onTap: () => setState(() {
+          _grouping = next;
+          _recompute();
+        }),
+        borderRadius: Radii.rFull,
+        child: Tooltip(
+          message: strings(next.labelKey()),
+          child: Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: Space.s5),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.swap_vert, size: 16, color: t.textSecondary),
+                const SizedBox(width: Space.s2),
+                Text(
+                  strings(next.labelKey()),
+                  style: txt.caption.copyWith(color: t.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -386,6 +586,7 @@ class _SessionsPageState extends State<SessionsPage> {
     final items = [
       (SessionFilter.all, AppStrings.of(context)('sessions.all')),
       (SessionFilter.running, AppStrings.of(context)('session.state.running')),
+      (SessionFilter.needsYou, AppStrings.of(context)('tasks.needsYou')),
       (SessionFilter.withAgent, AppStrings.of(context)('sessions.withAgent')),
     ];
     return showModalBottomSheet<void>(
@@ -452,22 +653,37 @@ class _SessionsPageState extends State<SessionsPage> {
   }
 
   /// 分组灰头。组名在「未归类」组是本地化的（协议层留空串）。
+  /// 组名：项目轴取组标题，状态轴本地化，未归类轴本地化。
+  String _groupName(AppStrings strings, _ListGroup g) {
+    final state = g.state;
+    if (state != null) {
+      return switch (state) {
+        SessionTaskKind.needsAnswer => strings('tasks.needsYou'),
+        // 组头用 tasks.running（进行中），与筛选 chip 的会话状态
+        // （运行中）区分开 —— 同一屏里两个「运行中」会让人以为是同一个东西。
+        SessionTaskKind.running => strings('tasks.running'),
+        SessionTaskKind.idle => strings('session.state.idle'),
+        SessionTaskKind.dormant => strings('session.state.history'),
+      };
+    }
+    return g.unassigned ? strings('sessions.groupOther') : g.title;
+  }
+
   Widget _header(
     AppStrings strings,
-    SessionGroup g, {
+    _ListGroup g, {
     required bool expanded,
     required bool forceExpand,
     required bool animate,
   }) {
-    final name = g.kind == SessionGroupKind.unassigned
-        ? strings('sessions.groupOther')
-        : g.title;
+    final name = _groupName(strings, g);
     return GroupHeaderCard(
       title: name,
       count: g.sessions.length,
       expanded: expanded,
       onTap: forceExpand ? null : () => _toggleGroup(g.key),
       animate: animate,
+      collapsedIcon: g.icon ?? Icons.folder_outlined,
       semanticsLabel: strings.withArgs(
         expanded ? 'sessions.groupExpanded' : 'sessions.groupCollapsed',
         {'name': name, 'n': g.sessions.length},
@@ -475,7 +691,7 @@ class _SessionsPageState extends State<SessionsPage> {
     );
   }
 
-  Widget _body(Tokens t, AppTextStyles txt, List<SessionGroup> groups) {
+  Widget _body(Tokens t, AppTextStyles txt, List<_ListGroup> groups) {
     final strings = AppStrings.of(context);
     if (_loading && _all.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -483,7 +699,7 @@ class _SessionsPageState extends State<SessionsPage> {
     if (_error != null && _all.isEmpty) {
       return ErrorState(error: _error!, onRetry: _load);
     }
-    if (groups.isEmpty) {
+    if (groups.isEmpty && widget.approvals.isEmpty) {
       return EmptyState(
         title: _query.isEmpty
             ? strings('sessions.empty')
@@ -507,6 +723,14 @@ class _SessionsPageState extends State<SessionsPage> {
         key: const PageStorageKey('sessions.list'),
         primary: scrollController == null,
         slivers: [
+          if (widget.approvals.isNotEmpty)
+            SliverToBoxAdapter(
+              child: ApprovalsSection(
+                approvals: widget.approvals,
+                busyEventId: widget.busyApprovalEventId,
+                onDecide: widget.onDecideApproval,
+              ),
+            ),
           for (final g in groups) ...[
             SliverToBoxAdapter(
               child: Padding(
@@ -532,8 +756,9 @@ class _SessionsPageState extends State<SessionsPage> {
                   final s = g.sessions[i];
                   return _SessionRow(
                     session: s,
-                    // 组头已经显示项目名，行里不再重复
-                    showPath: g.kind == SessionGroupKind.unassigned,
+                    // 项目轴的组头已经写了项目名，行里不再重复；
+                    // 状态轴没有项目信息，必须显示。
+                    showPath: g.unassigned || g.state != null,
                     last: i == g.sessions.length - 1,
                     onTap: () => widget.onOpen?.call(s),
                   );
