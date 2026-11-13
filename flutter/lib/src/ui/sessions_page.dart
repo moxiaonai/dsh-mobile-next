@@ -1,14 +1,13 @@
-/// 会话列表页。对齐 `docs/10-ui-spec.md` §5.2。
+/// 会话列表页。视觉按 2026-11-13 UI 稿重做：
 ///
-/// 元素规格（逐条照抄 spec）：
-/// - SearchField 高 44，`--r-md`，`--c-bg-sunken` 底；聚焦加 accent 描边 + 3px 光晕；
-///   字号 ≥16（防 iOS 缩放）
-/// - FilterChips：外层命中 44，内部药丸 32，横滑
-/// - GroupHeader 高 32，sticky，`--t-chrome`
-/// - SessionRow min-height 64，标题 1 行 ellipsis + 第二行工作区/时间
+/// - 大标题「会话」+ 右上两个圆形入口（搜索 / 筛选）
+/// - 搜索框：`bgSunken` 底、`rLg` 圆角、56 高
+/// - 筛选 chip：选中黑底白字，未选中灰底黑字
+/// - 分组卡片：展开时「灰色组头 + 白色行」，收起时整卡一行（文件夹图标）
+/// - 行：44 图标瓦片 + 标题/副标题 + 右箭头，分隔线只从标题左沿开始
+/// - FAB：黑色圆形（与 chip / 底部导航选中态同一套「墨色」）
 ///
-/// **未做 Swipe 动作**：spec 要求 swipe 是加速器、必须有「…」按钮的等价路径。
-/// 这里只做「…」路径 —— 功能完整，少一套手势；swipe 可后续补。
+/// 折叠状态仍由外层持久化（`initialCollapsed` / `onCollapsedChanged`）。
 library;
 
 import 'dart:async';
@@ -44,6 +43,7 @@ class SessionsPage extends StatefulWidget {
   /// 返回新建会话的 id；页面用它直接进入详情（新会话是 blank 的，
   /// 不会出现在列表里，所以必须靠返回值而不是刷新列表）。
   final Future<String?> Function()? onCreate;
+
   /// 页面标题；为空时用当前语言的默认值。
   final String? title;
 
@@ -68,6 +68,7 @@ class _SessionsPageState extends State<SessionsPage> {
   String _query = '';
   SessionFilter _filter = SessionFilter.all;
   final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
 
   /// 已计算的分组（filter + group + search 的结果）。
   ///
@@ -116,6 +117,16 @@ class _SessionsPageState extends State<SessionsPage> {
     widget.onCollapsedChanged?.call({..._collapsed});
   }
 
+  void _expandAll() {
+    setState(() => _collapsed = <String>{});
+    widget.onCollapsedChanged?.call(<String>{});
+  }
+
+  void _collapseAll() {
+    setState(() => _collapsed = {for (final g in _groups) g.key});
+    widget.onCollapsedChanged?.call({..._collapsed});
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -143,6 +154,7 @@ class _SessionsPageState extends State<SessionsPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -162,58 +174,74 @@ class _SessionsPageState extends State<SessionsPage> {
         child: Stack(
           children: [
             Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Space.s7,
-                Space.s6,
-                Space.s7,
-                Space.s3,
-              ),
-              child: Row(
-                children: [
-                  Text(widget.title ?? AppStrings.of(context)('sessions.title'), style: txt.h1),
-                  const Spacer(),
-                  if (_error != null)
-                    IconButton(
-                      onPressed: _load,
-                      icon: const Icon(Icons.refresh),
-                      color: t.textSecondary,
-                      tooltip: AppStrings.of(context)('common.retry'),
-                    ),
-                ],
-              ),
-            ),
-            _searchField(t, txt),
-            const SizedBox(height: Space.s3),
-            _chips(t, txt, strings),
-            const SizedBox(height: Space.s2),
-            Expanded(child: _body(t, txt, groups)),
-          ],
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    Space.s8,
+                    Space.s2,
+                    Space.s8,
+                    0,
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        widget.title ?? strings('sessions.title'),
+                        style: txt.display,
+                      ),
+                      const Spacer(),
+                      _RoundIconButton(
+                        icon: Icons.search,
+                        tooltip: strings('sessions.searchAction'),
+                        tokens: t,
+                        onTap: () => _searchFocus.requestFocus(),
+                      ),
+                      const SizedBox(width: Space.s4),
+                      _RoundIconButton(
+                        icon: Icons.tune,
+                        tooltip: strings('sessions.filter'),
+                        tokens: t,
+                        onTap: () => _openFilterSheet(t, txt, strings),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: Space.s5),
+                _searchField(t, txt),
+                const SizedBox(height: Space.s6),
+                _chips(t, txt, strings),
+                const SizedBox(height: Space.s4),
+                Expanded(child: _body(t, txt, groups)),
+              ],
             ),
             // FAB 放在 body 的 Stack 里而不是 Scaffold.floatingActionButton：
             // 本页嵌在外层 Scaffold 的 body 中，内层 FAB 会被外层的
             // bottomNavigationBar 盖住（实测点了没反应）。
             if (widget.onCreate != null)
               Positioned(
-                right: Space.s5,
-                bottom: Space.s5,
-                child: FloatingActionButton(
-                  key: const ValueKey('sessions.fab'),
-                  onPressed: _creating ? null : _create,
-                  backgroundColor: t.accent,
-                  foregroundColor: t.onAccent,
-                  tooltip: strings('sessions.new'),
-                  child: _creating
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: t.onAccent,
-                          ),
-                        )
-                      : const Icon(Icons.add),
+                right: Space.s10,
+                bottom: Space.s10,
+                child: SizedBox(
+                  width: 64,
+                  height: 64,
+                  child: FloatingActionButton(
+                    key: const ValueKey('sessions.fab'),
+                    tooltip: strings('sessions.new'),
+                    backgroundColor: t.textPrimary,
+                    foregroundColor: t.bgCard,
+                    elevation: 2,
+                    shape: const CircleBorder(),
+                    onPressed: _creating ? null : _create,
+                    child: _creating
+                        ? SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: t.bgCard,
+                            ),
+                          )
+                        : const Icon(Icons.add, size: 30),
+                  ),
                 ),
               ),
           ],
@@ -259,9 +287,10 @@ class _SessionsPageState extends State<SessionsPage> {
 
   Widget _searchField(Tokens t, AppTextStyles txt) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Space.s7),
+      padding: const EdgeInsets.symmetric(horizontal: Space.s8),
       child: TextField(
         controller: _searchController,
+        focusNode: _searchFocus,
         onChanged: (v) => setState(() {
           _query = v;
           _recompute();
@@ -272,7 +301,7 @@ class _SessionsPageState extends State<SessionsPage> {
         decoration: InputDecoration(
           isDense: true,
           hintText: AppStrings.of(context)('sessions.search'),
-          hintStyle: txt.caption,
+          hintStyle: txt.body.copyWith(color: t.textTertiary),
           prefixIcon: Icon(Icons.search, size: 20, color: t.textTertiary),
           suffixIcon: _query.isEmpty
               ? null
@@ -289,15 +318,15 @@ class _SessionsPageState extends State<SessionsPage> {
                 ),
           filled: true,
           fillColor: t.bgSunken,
-          contentPadding: const EdgeInsets.symmetric(vertical: Space.s5),
-          constraints: const BoxConstraints(minHeight: Hit.min),
+          contentPadding: const EdgeInsets.symmetric(vertical: Space.s4),
+          constraints: const BoxConstraints(minHeight: 56),
           border: OutlineInputBorder(
-            borderRadius: Radii.rMd,
+            borderRadius: Radii.rLg,
             borderSide: BorderSide.none,
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: Radii.rMd,
-            borderSide: BorderSide(color: t.accent),
+            borderRadius: Radii.rLg,
+            borderSide: BorderSide(color: t.textPrimary, width: 1.2),
           ),
         ),
       ),
@@ -311,34 +340,34 @@ class _SessionsPageState extends State<SessionsPage> {
       (SessionFilter.withAgent, AppStrings.of(context)('sessions.withAgent')),
     ];
     return SizedBox(
-      height: Hit.min,
+      height: 40,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: Space.s7),
+        padding: const EdgeInsets.symmetric(horizontal: Space.s8),
         itemCount: items.length,
-        separatorBuilder: (_, _) => const SizedBox(width: Space.s4),
+        separatorBuilder: (_, _) => const SizedBox(width: Space.s5),
         itemBuilder: (context, i) {
           final (f, label) = items[i];
           final on = _filter == f;
           return Center(
-            child: InkWell(
-              onTap: () => setState(() {
-                _filter = f;
-                _recompute();
-              }),
+            child: Material(
+              color: on ? t.textPrimary : t.bgSunken,
               borderRadius: Radii.rFull,
-              child: Container(
-                height: 32,
-                padding: const EdgeInsets.symmetric(horizontal: Space.s6),
-                decoration: BoxDecoration(
-                  color: on ? t.accent : t.bgSunken,
-                  borderRadius: Radii.rFull,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  label,
-                  style: txt.chrome.copyWith(
-                    color: on ? t.onAccent : t.textSecondary,
+              child: InkWell(
+                onTap: () => setState(() {
+                  _filter = f;
+                  _recompute();
+                }),
+                borderRadius: Radii.rFull,
+                child: Container(
+                  height: 40,
+                  padding: const EdgeInsets.symmetric(horizontal: Space.s9),
+                  alignment: Alignment.center,
+                  child: Text(
+                    label,
+                    style: txt.body.copyWith(
+                      color: on ? t.bgCard : t.textPrimary,
+                    ),
                   ),
                 ),
               ),
@@ -346,6 +375,80 @@ class _SessionsPageState extends State<SessionsPage> {
           );
         },
       ),
+    );
+  }
+
+  /// 右上「筛选」入口：筛选 + 分组的批量展开/收起。
+  Future<void> _openFilterSheet(
+    Tokens t,
+    AppTextStyles txt,
+    AppStrings strings,
+  ) {
+    final items = [
+      (SessionFilter.all, AppStrings.of(context)('sessions.all')),
+      (SessionFilter.running, AppStrings.of(context)('session.state.running')),
+      (SessionFilter.withAgent, AppStrings.of(context)('sessions.withAgent')),
+    ];
+    return showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: t.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              Space.s8,
+              Space.s6,
+              Space.s8,
+              Space.s4,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(strings('sessions.filter'), style: txt.h3),
+                const SizedBox(height: Space.s2),
+                for (final (f, label) in items)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(label, style: txt.body),
+                    trailing: _filter == f
+                        ? Icon(Icons.check, color: t.textPrimary)
+                        : null,
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      setState(() {
+                        _filter = f;
+                        _recompute();
+                      });
+                    },
+                  ),
+                Divider(color: t.borderSubtle, height: 1),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.unfold_more, color: t.textSecondary),
+                  title: Text(strings('sessions.expandAll'), style: txt.body),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _expandAll();
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.unfold_less, color: t.textSecondary),
+                  title: Text(strings('sessions.collapseAll'), style: txt.body),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _collapseAll();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -373,60 +476,100 @@ class _SessionsPageState extends State<SessionsPage> {
     // 筛选不强制展开 —— 那是在同一列表上缩小范围，折叠仍是有效手势。
     final forceExpand = _query.trim().isNotEmpty;
     final noAnimation = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final scrollController = PrimaryScrollController.maybeOf(context);
 
     return RefreshIndicator(
       onRefresh: _load,
       child: CustomScrollView(
         key: const PageStorageKey('sessions.list'),
+        primary: scrollController == null,
         slivers: [
-          for (final g in groups)
-            SliverMainAxisGroup(
-              slivers: [
-                // 组头在本组可见期间吸顶（spec §5.2 的 sticky）。
-                PinnedHeaderSliver(
-                  child: _GroupHeader(
-                    group: g,
-                    count: g.sessions.length,
-                    collapsed: !forceExpand && _collapsed.contains(g.key),
-                    tokens: t,
-                    txt: txt,
-                    strings: strings,
-                    onToggle: forceExpand ? null : () => _toggleGroup(g.key),
-                    animate: !noAnimation,
-                  ),
+          for (final g in groups) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Space.s8,
+                  Space.s8,
+                  Space.s8,
+                  0,
                 ),
-                if (forceExpand || !_collapsed.contains(g.key))
-                  SliverList.builder(
-                    itemCount: g.sessions.length,
-                    itemBuilder: (context, i) {
-                      final s = g.sessions[i];
-                      return _SessionRow(
-                        session: s,
-                        // 组头已经显示项目名，行里不再重复
-                        showPath: g.kind == SessionGroupKind.unassigned,
-                        onTap: () => widget.onOpen?.call(s),
-                      );
-                    },
-                  ),
-              ],
+                child: _GroupHeader(
+                  group: g,
+                  count: g.sessions.length,
+                  collapsed: !forceExpand && _collapsed.contains(g.key),
+                  tokens: t,
+                  txt: txt,
+                  strings: strings,
+                  onToggle: forceExpand ? null : () => _toggleGroup(g.key),
+                  animate: !noAnimation,
+                ),
+              ),
             ),
-          // 底部留白：FAB 是 56 高、离底 16，共占 72。
+            if (forceExpand || !_collapsed.contains(g.key))
+              SliverList.builder(
+                itemCount: g.sessions.length,
+                itemBuilder: (context, i) {
+                  final s = g.sessions[i];
+                  return _SessionRow(
+                    session: s,
+                    // 组头已经显示项目名，行里不再重复
+                    showPath: g.kind == SessionGroupKind.unassigned,
+                    last: i == g.sessions.length - 1,
+                    onTap: () => widget.onOpen?.call(s),
+                  );
+                },
+              ),
+          ],
+          // 底部留白：FAB 是 64 高、离底 24，共占 88。
           // 不留够的话最后一行会被 FAB 盖住，点不到也看不全。
           SliverToBoxAdapter(
-            child: SizedBox(height: widget.onCreate == null ? Space.s12 : 72),
+            child: SizedBox(height: widget.onCreate == null ? Space.s12 : 96),
           ),
         ],
       ),
     );
   }
-
 }
 
-/// 分组头：可点击展开/收起，命中区 44。
+/// 右上角圆形图标按钮（搜索 / 筛选）。
+class _RoundIconButton extends StatelessWidget {
+  const _RoundIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.tokens,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final Tokens tokens;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: tokens.bgCard,
+        shape: CircleBorder(side: BorderSide(color: tokens.borderSubtle)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(
+            width: Hit.min,
+            height: Hit.min,
+            child: Icon(icon, size: 22, color: tokens.textPrimary),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 分组头。
 ///
-/// 之前叫 `_StickyGroupHeader` 但**并不 sticky**（只是普通 32 高的 Container），
-/// 长列表滚动时组名直接滚出屏幕，失去定位依据。现在由
-/// `PinnedHeaderSliver` 真正吸顶，高度也提到 `Hit.min`(44) 满足命中区要求。
+/// 展开态：灰色组头（顶部圆角），下方接白色行卡；收起态：整卡一行，
+/// 左侧文件夹图标 + 分组名 + 数量 + 右箭头。
 class _GroupHeader extends StatelessWidget {
   const _GroupHeader({
     required this.group,
@@ -459,6 +602,9 @@ class _GroupHeader extends StatelessWidget {
       collapsed ? 'sessions.groupCollapsed' : 'sessions.groupExpanded',
       {'name': title, 'n': count},
     );
+    final radius = collapsed
+        ? Radii.rLg
+        : const BorderRadius.vertical(top: Radius.circular(Radii.lg));
 
     return Semantics(
       button: onToggle != null,
@@ -467,14 +613,54 @@ class _GroupHeader extends StatelessWidget {
       expanded: !collapsed,
       label: semanticsLabel,
       child: Material(
-        color: tokens.bgCanvas,
+        color: collapsed ? tokens.bgCard : tokens.bgSunken,
+        borderRadius: radius,
         child: InkWell(
           onTap: onToggle,
+          borderRadius: radius,
           child: Container(
-            constraints: const BoxConstraints(minHeight: Hit.min),
-            padding: const EdgeInsets.symmetric(horizontal: Space.s7),
+            constraints: const BoxConstraints(minHeight: 60),
+            padding: const EdgeInsets.symmetric(horizontal: Space.s5),
             child: Row(
               children: [
+                // ⚠ 这里不能写成 `Flexible(标题) ... Spacer() 箭头`：
+                // Flexible 是 flex 子项，会按 flex 分走一半自由空间，
+                // 剩下的才给 Spacer —— 箭头因此被拉离右边缘约 70dp。
+                // 正确做法：左侧整组用 Expanded 吃掉剩余空间，箭头直接收尾。
+                Expanded(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (collapsed) ...[
+                        Icon(
+                          Icons.folder_outlined,
+                          size: 22,
+                          color: tokens.textSecondary,
+                        ),
+                        const SizedBox(width: Space.s6),
+                      ],
+                      Flexible(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: txt.h3.copyWith(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 17,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: Space.s4),
+                      Text(
+                        '$count',
+                        style: txt.body.copyWith(
+                          fontSize: 15,
+                          color: tokens.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 AnimatedRotation(
                   turns: collapsed ? -0.25 : 0,
                   duration: animate
@@ -483,23 +669,9 @@ class _GroupHeader extends StatelessWidget {
                   curve: Curves.easeOut,
                   child: Icon(
                     Icons.expand_more,
-                    size: 16,
+                    size: 22,
                     color: tokens.textTertiary,
                   ),
-                ),
-                const SizedBox(width: Space.s3),
-                Flexible(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: txt.chrome.copyWith(color: tokens.textSecondary),
-                  ),
-                ),
-                const SizedBox(width: Space.s3),
-                Text(
-                  '$count',
-                  style: txt.caption.copyWith(color: tokens.textTertiary),
                 ),
               ],
             ),
@@ -515,6 +687,7 @@ class _SessionRow extends StatelessWidget {
     required this.session,
     this.onTap,
     this.showPath = true,
+    this.last = false,
   });
 
   final SessionSummary session;
@@ -524,70 +697,107 @@ class _SessionRow extends StatelessWidget {
   /// 按项目分组后组头已经是项目名，行里再重复一次是噪音；
   /// 未归类组没有组头信息可依赖，所以仍显示。
   final bool showPath;
+
+  /// 是否本组最后一行（只有它带底部圆角，和上面的组头凑成一张卡）。
+  final bool last;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final (t, txt) = AppTheme.of(context);
-    return Material(
-      color: t.bgCanvas,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 64),
-          padding: const EdgeInsets.fromLTRB(
-            Space.s7,
-            Space.s5,
-            Space.s7,
-            Space.s5,
-          ),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: t.borderSubtle, width: 0.5),
-            ),
-          ),
-          child: Row(
+    final radius = last
+        ? const BorderRadius.vertical(bottom: Radius.circular(Radii.lg))
+        : BorderRadius.zero;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: Space.s8),
+      decoration: BoxDecoration(color: t.bgCard, borderRadius: radius),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: radius,
+          child: Column(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Space.s4,
+                  Space.s5,
+                  Space.s4,
+                  Space.s5,
+                ),
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        if (session.running) ...[
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: t.accent,
-                              shape: BoxShape.circle,
-                            ),
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: t.bgSunken,
+                        borderRadius: Radii.rMd,
+                      ),
+                      child: Icon(
+                        _iconFor(session),
+                        size: 22,
+                        color: t.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(width: Space.s6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Row(
+                            children: [
+                              if (session.running) ...[
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: t.successDot,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: Space.s3),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  session.title ?? _shortId(session.id),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: txt.body.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: Space.s3),
-                        ],
-                        Expanded(
-                          child: Text(
-                            session.title ?? _shortId(session.id),
+                          const SizedBox(height: Space.s1),
+                          Text(
+                            _subtitle(
+                              session,
+                              AppStrings.of(context),
+                              showPath: showPath,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: txt.body,
+                            style: txt.caption.copyWith(color: t.textTertiary),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: Space.s1),
-                    Text(
-                      _subtitle(session, AppStrings.of(context), showPath: showPath),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: txt.caption,
-                    ),
+                    const SizedBox(width: Space.s4),
+                    Icon(Icons.chevron_right, size: 20, color: t.textTertiary),
                   ],
                 ),
               ),
-              const SizedBox(width: Space.s4),
-              Icon(Icons.chevron_right, size: 18, color: t.textTertiary),
+              // 分隔线只从标题左沿开始（图标瓦片右侧），iOS 列表的常规做法。
+              if (!last)
+                Container(
+                  height: 1,
+                  margin: const EdgeInsets.only(left: 76),
+                  color: t.borderSubtle,
+                ),
             ],
           ),
         ),
@@ -609,7 +819,58 @@ class _SessionRow extends StatelessWidget {
     if (s.updatedAt != null) parts.add(formatRelativeTime(strings, s.updatedAt!));
     return parts.isEmpty ? s.id.substring(0, 12) : parts.join(' · ');
   }
+}
 
+/// 行首图标：按会话标题/路径里的关键词挑一个，取不到的用「层叠」兜底。
+///
+/// 纯装饰，不进语义树；同一个会话永远得到同一个图标（确定性映射）。
+IconData _iconFor(SessionSummary s) {
+  final text = '${s.title ?? ''} ${s.cwd ?? ''}'.toLowerCase();
+  if (text.contains('图标') || text.contains('icon') || text.contains('image')) {
+    return Icons.image_outlined;
+  }
+  if (text.contains('回退') || text.contains('0.1.')) {
+    return Icons.layers_outlined;
+  }
+  if (text.contains('ui') ||
+      text.contains('交互') ||
+      text.contains('重设计') ||
+      text.contains('重构')) {
+    return Icons.code;
+  }
+  if (text.contains('插件') ||
+      text.contains('仓库') ||
+      text.contains('打包') ||
+      text.contains('发布')) {
+    return Icons.inventory_2_outlined;
+  }
+  if (text.contains('远程') ||
+      text.contains('通道') ||
+      text.contains('架构') ||
+      text.contains('git') ||
+      text.contains('分支')) {
+    return Icons.account_tree_outlined;
+  }
+  if (text.contains('移动端') ||
+      text.contains('app') ||
+      text.contains('手机') ||
+      text.contains('任务接管')) {
+    return Icons.smartphone;
+  }
+  if (text.contains('错乱') ||
+      text.contains('失败') ||
+      text.contains('异常') ||
+      text.contains('bug')) {
+    return Icons.error_outline;
+  }
+  if (text.contains('代码') ||
+      text.contains('实现') ||
+      text.contains('开发') ||
+      text.contains('flutter')) {
+    return Icons.code;
+  }
+  return Icons.layers_outlined;
+}
 
 /// 会话 id 的短标签。
 ///
@@ -619,6 +880,4 @@ String _shortId(String id) {
   final stripped = id.startsWith('session-') ? id.substring(8) : id;
   final short = stripped.length > 8 ? stripped.substring(0, 8) : stripped;
   return '会话 $short';
-}
-
 }

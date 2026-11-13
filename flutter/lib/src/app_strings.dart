@@ -234,6 +234,10 @@ class AppStrings {
     'sessions.groupCollapsed': '{name}，{n} 个会话，已收起',
     'sessions.expand': '展开',
     'sessions.collapse': '收起',
+    'sessions.filter': '筛选',
+    'sessions.expandAll': '全部展开',
+    'sessions.collapseAll': '全部收起',
+    'sessions.searchAction': '搜索',
 
     // 会话状态
     'session.state.running': '运行中',
@@ -534,6 +538,10 @@ class AppStrings {
     'sessions.groupCollapsed': '{name}, {n} sessions, collapsed',
     'sessions.expand': 'Expand',
     'sessions.collapse': 'Collapse',
+    'sessions.filter': 'Filter',
+    'sessions.expandAll': 'Expand all',
+    'sessions.collapseAll': 'Collapse all',
+    'sessions.searchAction': 'Search',
 
     'session.state.running': 'Running',
     'session.state.idle': 'Idle',

@@ -862,34 +862,61 @@ class _ShellState extends State<_Shell> {
       // 会话详情是 push 面，隐藏底部导航（spec §5.4：详情页不占 tab）。
       bottomNavigationBar: (_openSession != null || _showJobs)
           ? null
-          : NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
-        backgroundColor: t.bgCard,
-        indicatorColor: t.accentWeakBg,
-        height: 64,
-        destinations: [
-          // 任务（含通知角标）：回答「有什么要我处理」
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: _notices.unreadCount > 0,
-              label: Text('${_notices.unreadCount}'),
-              child: const Icon(Icons.task_alt),
+          // 选中态是「墨色」：indicator 透明 + 图标/文字用 textPrimary，
+          // 未选中降到 textTertiary。新稿里 FAB、筛选 chip 用的是同一套。
+          : NavigationBarTheme(
+              data: NavigationBarThemeData(
+                backgroundColor: t.bgCard,
+                indicatorColor: Colors.transparent,
+                iconTheme: WidgetStateProperty.resolveWith(
+                  (states) => IconThemeData(
+                    size: 24,
+                    color: states.contains(WidgetState.selected)
+                        ? t.textPrimary
+                        : t.textTertiary,
+                  ),
+                ),
+                labelTextStyle: WidgetStateProperty.resolveWith(
+                  (states) => TextStyle(
+                    fontSize: 12,
+                    fontWeight: states.contains(WidgetState.selected)
+                        ? FontWeight.w600
+                        : FontWeight.w400,
+                    color: states.contains(WidgetState.selected)
+                        ? t.textPrimary
+                        : t.textTertiary,
+                  ),
+                ),
+              ),
+              child: NavigationBar(
+                selectedIndex: _tab,
+                onDestinationSelected: (i) => setState(() => _tab = i),
+                backgroundColor: t.bgCard,
+                indicatorColor: Colors.transparent,
+                height: 64,
+                destinations: [
+                  // 任务（含通知角标）：回答「有什么要我处理」
+                  NavigationDestination(
+                    icon: Badge(
+                      isLabelVisible: _notices.unreadCount > 0,
+                      label: Text('${_notices.unreadCount}'),
+                      child: const Icon(Icons.task_alt),
+                    ),
+                    label: strings('nav.tasks'),
+                  ),
+                  // 会话：回答「我要找某个对话」
+                  NavigationDestination(
+                    icon: const Icon(Icons.forum_outlined),
+                    label: strings('nav.sessions'),
+                  ),
+                  // 设置：外观 + 已配对设备（低频，收进这里）
+                  NavigationDestination(
+                    icon: const Icon(Icons.settings_outlined),
+                    label: strings('nav.settings'),
+                  ),
+                ],
+              ),
             ),
-            label: strings('nav.tasks'),
-          ),
-          // 会话：回答「我要找某个对话」
-          NavigationDestination(
-            icon: const Icon(Icons.forum_outlined),
-            label: strings('nav.sessions'),
-          ),
-          // 设置：外观 + 已配对设备（低频，收进这里）
-          NavigationDestination(
-            icon: const Icon(Icons.settings_outlined),
-            label: strings('nav.settings'),
-          ),
-        ],
-      ),
     );
 
     // 系统返回（Android 返回键 / 左滑返回手势）必须**先关内层**再退出 App。
