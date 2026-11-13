@@ -202,8 +202,12 @@ class ApprovalCard extends StatelessWidget {
                             ? null
                             : () => onDecide!(ApprovalDecision.approve),
                         style: FilledButton.styleFrom(
-                          backgroundColor: t.danger,
-                          foregroundColor: t.bgCard,
+                          // 深色下 danger 是浅粉（用于文字），当实心按钮底会发飘；
+                          // 换成深红 + 白字，保持「最危险的按钮」的视觉重量。
+                          backgroundColor: t.isDark
+                              ? const Color(0xFFB91C1C)
+                              : t.danger,
+                          foregroundColor: Colors.white,
                           disabledBackgroundColor: t.disabledBg,
                           disabledForegroundColor: t.disabledText,
                           shape: const StadiumBorder(),

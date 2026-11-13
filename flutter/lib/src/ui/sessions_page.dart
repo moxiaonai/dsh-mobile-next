@@ -361,7 +361,9 @@ class _SessionsPageState extends State<SessionsPage> {
             // FAB 放在 body 的 Stack 里而不是 Scaffold.floatingActionButton：
             // 本页嵌在外层 Scaffold 的 body 中，内层 FAB 会被外层的
             // bottomNavigationBar 盖住（实测点了没反应）。
-            if (widget.onCreate != null)
+            // 有待审批时先不显示 FAB：它会压在审批卡的「允许」按钮上，
+            // 误触就是一次高危放行。审批卡片处理完自然回来。
+            if (widget.onCreate != null && widget.approvals.isEmpty)
               Positioned(
                 right: Space.s10,
                 bottom: Space.s10,
