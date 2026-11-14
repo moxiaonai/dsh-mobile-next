@@ -40,7 +40,8 @@ import 'src/ui/back_navigation.dart';
 import 'src/ui/devices_page.dart';
 import 'src/ui/diagnostics_page.dart';
 import 'src/ui/job_center_page.dart';
-import 'src/ui/job_widgets.dart' show AppTheme, ErrorState;
+import 'src/ui/job_widgets.dart' show AppTheme;
+import 'src/ui/friendly_error.dart' show FriendlyError;
 import 'src/ui/inbox_page.dart';
 import 'src/ui/session_detail_page.dart';
 import 'src/ui/sessions_page.dart';
@@ -226,6 +227,19 @@ class _ShellState extends State<_Shell> {
 
   /// 配对流程（懒创建）。
   PairingFlow? _pairingFlow;
+
+  /// 一次「已配对设备重连」最多等多久。
+  ///
+  /// 之前没有超时：网关不应答（手机换了网、电脑休眠、旧地址失效）时，
+  /// 首屏会无限转圈且没有任何操作入口，只能杀进程。
+  static const Duration _connectTimeout = Duration(seconds: 8);
+
+  /// 是否正在重连（首屏据此显示「取消连接 / 配对新的电脑」）。
+  bool _connecting = false;
+
+  /// 上一次重连是不是超时收场：用它来出中文文案，而不是把翻译串存进 _error
+  /// （_status/_error 可能在语言包加载前生成，之后不会自己刷新）。
+  bool _timedOut = false;
   final RequestGeneration _connectionRequests = RequestGeneration();
 
   /// 打包进 APK 的私有 CA（PEM）。启动时读一次。
@@ -513,6 +527,12 @@ class _ShellState extends State<_Shell> {
       await _reconnect(silent: true);
       debugPrint('[boot] 重连结果 conn=${_conn != null} sessionId=$_sessionId');
       if (_conn != null) return;
+      // 有凭据但没连上（超时/网络不通/电脑没开）：停在「未连接」落地页，
+      // 给出重试 / 换一台电脑 / 看设备三个出口。
+      // 旧行为是直接跳配对页 —— 用户明明配对过，却被要求重新扫码。
+      if (!mounted) return;
+      setState(() => _connecting = false);
+      return;
     }
 
     // ② 没有任何已配对设备 → 直接进配对页（而不是卡在连接中）
@@ -913,6 +933,53 @@ class _ShellState extends State<_Shell> {
     );
   }
 
+  /// 跑一次重连，超时按失败处理。
+  ///
+  /// 超时必须显式 `flow.cancel()` 掐掉底层尝试，否则它继续跑，
+  /// 下一次重连会和这次抢同一个连接。
+  Future<PairingOutcome> _attemptReconnect(PairingFlow flow) async {
+    _timedOut = false;
+    final timeoutText = AppStrings.of(context)('conn.timeout');
+    try {
+      return await flow
+          .reconnect(_credentials.first)
+          .timeout(_connectTimeout);
+    } on TimeoutException {
+      _timedOut = true;
+      await flow.cancel();
+      return PairingFailed(
+        failure: PairingFailure.network,
+        message: timeoutText,
+      );
+    }
+  }
+
+  /// 取消正在进行的重连。
+  ///
+  /// 先把 request generation 顶掉，让 `_reconnect` 里所有 `owns()` 都变 false
+  /// （它就不会再 setState 把界面推回「连接中」），再掐底层连接。
+  Future<void> _cancelConnecting() async {
+    _connectionRequests.invalidate();
+    final strings = AppStrings.of(context);
+    await _pairingFlow?.cancel();
+    if (!mounted) return;
+    setState(() {
+      _connecting = false;
+      _error = null;
+      _timedOut = false;
+      _jobs = null;
+      _sessionId = null;
+      _status = strings('conn.cancelled');
+    });
+  }
+
+  /// 连接中/连不上时直接去配对一台新电脑。
+  Future<void> _pairNewDevice() async {
+    await _cancelConnecting();
+    if (!mounted) return;
+    await _openPairing();
+  }
+
   /// 用第一台已配对设备重连。
   ///
   /// `silent`：启动时自动重连不弹「已重新连接」——那时 locale 还没加载完，
@@ -930,7 +997,9 @@ class _ShellState extends State<_Shell> {
     // 先取 messenger 与文案：await 之后不能再碰 context（会跨异步间隙）。
     final messenger = ScaffoldMessenger.of(context);
     final reconnectedText = AppStrings.of(context)('conn.reconnected');
-    final outcome = await flow.reconnect(_credentials.first);
+    setState(() => _connecting = true);
+    final outcome = await _attemptReconnect(flow);
+    if (mounted) setState(() => _connecting = false);
     if (!owns()) {
       if (outcome is PairingSucceeded) await outcome.connection.dispose();
       return;
@@ -960,6 +1029,7 @@ class _ShellState extends State<_Shell> {
         // 「正在连接已配对电脑…」—— 而日志里 conn=true，看起来像 UI 没刷新。
         _status = '已连接';
         _error = null;
+        _timedOut = false;
       });
       // 重连后拉一次会话，填上 _sessionId（否则界面判据仍不满足）
       await _hydrateSessions(outcome.connection);
@@ -969,6 +1039,7 @@ class _ShellState extends State<_Shell> {
       }
     } else {
       final failed = outcome as PairingFailed;
+      if (mounted) setState(() => _connecting = false);
       // ⚠ 重连失败必须把界面从「连接中」切走，否则用户看到的是无限转圈，
       // 而真正的失败原因只在一条会自动消失的 SnackBar 里。
       if (mounted) {
@@ -980,9 +1051,11 @@ class _ShellState extends State<_Shell> {
           _sessionId = null;
         });
       }
-      messenger.showSnackBar(
-        SnackBar(content: Text('重连失败：${failed.message}')),
-      );
+      if (!silent) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('重连失败：${failed.message}')),
+        );
+      }
     }
   }
 
@@ -1063,18 +1136,41 @@ class _ShellState extends State<_Shell> {
               t: t,
               txt: txt,
             )
-          : _error == null
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: Space.s6),
-                  Text(_status, style: txt.body),
-                ],
-              ),
+          : _connecting
+          // 连接中必须**可退出**：之前这里只有一个转圈，网关不应答时
+          // 用户既不能取消、也点不到「添加电脑」，只能杀进程。
+          ? _ConnectingBody(
+              // 用 key 而不是 _status：_status 可能在语言包加载前取过，
+              // 存下来就会一直停在英文。
+              status: AppStrings.of(context)('conn.reconnectingPaired'),
+              onCancel: _cancelConnecting,
+              onPairNew: _pairNewDevice,
+              t: t,
+              txt: txt,
             )
-          : ErrorState(error: _error!, onRetry: _boot);
+          : _DisconnectedLanding(
+              title: _timedOut
+                  ? AppStrings.of(context)('conn.timeout')
+                  : _error == null
+                  ? AppStrings.of(context)('conn.offline')
+                  : FriendlyError.from(
+                      _error!,
+                      AppStrings.of(context),
+                    ).title,
+              status: _timedOut
+                  ? AppStrings.of(context)('conn.timeoutHint')
+                  : _error == null
+                  ? _status
+                  : FriendlyError.from(
+                      _error!,
+                      AppStrings.of(context),
+                    ).hint,
+              onRetry: _boot,
+              onPairNew: _pairNewDevice,
+              onDevices: _openDevices,
+              t: t,
+              txt: txt,
+            );
     } else {
       body = switch (_tab) {
         // 会话（唯一的主列表：按项目/按状态两个轴切换，不再有并行的任务页）
@@ -1274,6 +1370,172 @@ class _ShellState extends State<_Shell> {
 /// 设计目标：新装 App 打开后**第一眼就知道该做什么**。
 /// 之前这里只有一个转圈 + 「连接中…」，用户无从下手 ——
 /// 入口藏在「设备」tab 里的一个按钮后面。
+/// 连接中的可取消面板。
+class _ConnectingBody extends StatelessWidget {
+  const _ConnectingBody({
+    required this.status,
+    required this.onCancel,
+    required this.onPairNew,
+    required this.t,
+    required this.txt,
+  });
+
+  final String status;
+  final VoidCallback onCancel;
+  final VoidCallback onPairNew;
+  final Tokens t;
+  final AppTextStyles txt;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(Space.s7),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+            const SizedBox(height: Space.s6),
+            Text(status, style: txt.body, textAlign: TextAlign.center),
+            const SizedBox(height: Space.s3),
+            Text(
+              strings('conn.cancelHint'),
+              style: txt.caption.copyWith(color: t.textTertiary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: Space.s8),
+            SizedBox(
+              height: Hit.primary,
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: onCancel,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: t.textPrimary,
+                  side: BorderSide(color: t.borderSubtle),
+                ),
+                child: Text(strings('conn.cancel')),
+              ),
+            ),
+            const SizedBox(height: Space.s3),
+            TextButton(
+              onPressed: onPairNew,
+              style: TextButton.styleFrom(foregroundColor: t.textSecondary),
+              child: Text(strings('conn.pairNew')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 已配对但没连上（取消 / 超时 / 失败后）的落地页：重试、换设备、看诊断。
+class _DisconnectedLanding extends StatelessWidget {
+  const _DisconnectedLanding({
+    required this.title,
+    required this.status,
+    required this.onRetry,
+    required this.onPairNew,
+    required this.onDevices,
+    required this.t,
+    required this.txt,
+  });
+
+  /// 主标题：没错误时是「未连接」，有错误时是翻译后的原因。
+  final String title;
+
+  /// 补充说明：有错误时是「怎么办」，否则是当前状态文案。
+  final String status;
+  final VoidCallback onRetry;
+  final VoidCallback onPairNew;
+  final VoidCallback onDevices;
+  final Tokens t;
+  final AppTextStyles txt;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(Space.s7),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: t.accentWeakBg,
+                borderRadius: Radii.rLg,
+              ),
+              child: Icon(
+                Icons.phonelink_erase,
+                size: 30,
+                color: t.textSecondary,
+              ),
+            ),
+            const SizedBox(height: Space.s6),
+            Text(title, style: txt.h2, textAlign: TextAlign.center),
+            const SizedBox(height: Space.s3),
+            Text(
+              strings('conn.offlineHint'),
+              style: txt.caption.copyWith(color: t.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: Space.s2),
+            Text(status, style: txt.caption.copyWith(color: t.textTertiary)),
+            const SizedBox(height: Space.s8),
+            SizedBox(
+              height: Hit.primary,
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: onRetry,
+                style: FilledButton.styleFrom(
+                  backgroundColor: t.accent,
+                  foregroundColor: t.onAccent,
+                ),
+                child: Text(strings('conn.retry')),
+              ),
+            ),
+            const SizedBox(height: Space.s4),
+            SizedBox(
+              height: Hit.primary,
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onPairNew,
+                icon: const Icon(Icons.qr_code_scanner, size: 18),
+                label: Text(strings('conn.pairNew')),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: t.textPrimary,
+                  side: BorderSide(color: t.borderSubtle),
+                ),
+              ),
+            ),
+            const SizedBox(height: Space.s4),
+            SizedBox(
+              height: Hit.primary,
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: onDevices,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: t.textSecondary,
+                  side: BorderSide(color: t.borderSubtle),
+                ),
+                child: Text(strings('devices.title')),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _UnpairedLanding extends StatelessWidget {
   const _UnpairedLanding({
     required this.status,

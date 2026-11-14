@@ -430,6 +430,15 @@ class AppStrings {
     'conn.reconnected': '已重新连接',
     'conn.reconnectFailed': '重连失败',
     'conn.reconnectFailedMsg': '重连失败：{msg}',
+    'conn.cancel': '取消连接',
+    'conn.cancelHint': '连不上会自动超时，也可以现在就取消。',
+    'conn.cancelled': '已取消连接',
+    'conn.timeout': '连接超时',
+    'conn.timeoutHint': '网络可能较慢，或电脑正忙。稍后重试。',
+    'conn.offline': '未连接',
+    'conn.offlineHint': '上次没有连上这台电脑。可以重试，或换一台电脑重新扫码配对。',
+    'conn.retry': '重试连接',
+    'conn.pairNew': '配对新的电脑',
     'nav.jobs': '后台任务',
   };
 
@@ -567,6 +576,8 @@ class AppStrings {
     'sessions.filter': 'Filter',
     'sessions.expandAll': 'Expand all',
     'sessions.collapseAll': 'Collapse all',
+    'sessions.groupByProject': 'By project',
+    'sessions.groupByState': 'By state',
     'sessions.searchAction': 'Search',
 
     'session.state.running': 'Running',
@@ -750,6 +761,15 @@ class AppStrings {
     'conn.reconnected': 'Reconnected',
     'conn.reconnectFailed': 'Reconnect failed',
     'conn.reconnectFailedMsg': 'Reconnect failed: {msg}',
+    'conn.cancel': 'Cancel',
+    'conn.cancelHint': 'It times out on its own, but you can cancel now.',
+    'conn.cancelled': 'Connection cancelled',
+    'conn.timeout': 'Connection timed out',
+    'conn.timeoutHint': 'The network may be slow, or the computer is busy. Try again in a moment.',
+    'conn.offline': 'Not connected',
+    'conn.offlineHint': 'Could not reach this computer. Retry, or pair a different one.',
+    'conn.retry': 'Retry',
+    'conn.pairNew': 'Pair another computer',
     'nav.jobs': 'Background jobs',
   };
 }

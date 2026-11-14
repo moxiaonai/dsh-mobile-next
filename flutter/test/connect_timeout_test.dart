@@ -52,5 +52,29 @@ void main() {
         reason: '补会话状态时要给 list() 加超时，8 秒拿不到就切到可操作状态',
       );
     });
+
+    test('重连已配对电脑必须带超时，并给出取消入口', () {
+      final source = File('lib/main.dart').readAsStringSync();
+      expect(
+        source.contains('_connectTimeout'),
+        isTrue,
+        reason: '重连要有一个明确的超时，否则网关不应答时首屏无限转圈',
+      );
+      expect(
+        source.contains('.timeout(_connectTimeout)'),
+        isTrue,
+        reason: '重连必须真的用上超时（只定义常量不算）',
+      );
+      expect(
+        source.contains("'conn.cancel'"),
+        isTrue,
+        reason: '连接中必须能取消，否则用户只能杀进程',
+      );
+      expect(
+        source.contains("'conn.pairNew'"),
+        isTrue,
+        reason: '连接中/连不上时要能直接去配对一台新电脑',
+      );
+    });
   });
 }

@@ -544,7 +544,12 @@ String themeLabel(AppStrings s, ThemePreference v) => switch (v) {
 ///
 /// 语言名用**各自的语言**书写（`简体中文` / `English`），不随界面语言变化 ——
 /// 否则英文界面下「中文」会显示成 Chinese，用户反而不好找。
-String languageLabel(AppStrings s, AppLanguage v) => v.label;
+String languageLabel(AppStrings s, AppLanguage v) => switch (v) {
+  // 「跟随系统」是行为描述，要跟着界面语言翻译；具体语言名
+  // （简体中文 / English）永远用它自己的语言写，方便用户在英文界面里找到。
+  AppLanguage.system => s('settings.language.system'),
+  AppLanguage.zh || AppLanguage.en => v.label,
+};
 
 /// 动效选项的显示名。
 String motionLabel(AppStrings s, MotionPreference v) => switch (v) {
