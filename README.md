@@ -14,6 +14,7 @@ DSH Mobile 由三部分组成：一个 **DSH 插件**（电脑端，发布到 np
 
 ## 目录
 
+- [界面预览](#界面预览)
 - [架构](#架构)
 - [组件](#组件)
 - [快速开始](#快速开始)
@@ -22,6 +23,57 @@ DSH Mobile 由三部分组成：一个 **DSH 插件**（电脑端，发布到 np
 - [开发](#开发)
 - [已知限制](#已知限制)
 - [第三方代码与许可证](#第三方代码与许可证)
+
+---
+
+## 界面预览
+
+两个 tab：会话与设置。会话列表可**按项目**或**按状态**分组，组头点一下收起；带「需要你」的会话和**待审批请求**会排在列表最前面。
+
+<table>
+  <tr>
+    <td><img src="screenshots/01-sessions-project.png" width="220" alt="会话列表 · 按项目分组"></td>
+    <td><img src="screenshots/02-sessions-state.png" width="220" alt="会话列表 · 按状态分组"></td>
+    <td><img src="screenshots/07-approvals.png" width="220" alt="待审批请求置顶"></td>
+  </tr>
+  <tr>
+    <td align="center">会话 · 按项目</td>
+    <td align="center">会话 · 按状态</td>
+    <td align="center">待审批置顶</td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/03-session-detail.png" width="220" alt="会话详情"></td>
+    <td><img src="screenshots/08-inbox.png" width="220" alt="通知中心"></td>
+    <td><img src="screenshots/09-pairing.png" width="220" alt="添加电脑 · 扫码配对"></td>
+  </tr>
+  <tr>
+    <td align="center">会话详情（DSH 真页面 + 移动外壳）</td>
+    <td align="center">通知中心</td>
+    <td align="center">添加电脑</td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/04-settings.png" width="220" alt="设置"></td>
+    <td><img src="screenshots/05-devices.png" width="220" alt="已配对设备"></td>
+    <td><img src="screenshots/06-diagnostics.png" width="220" alt="连接诊断"></td>
+  </tr>
+  <tr>
+    <td align="center">设置</td>
+    <td align="center">已配对设备</td>
+    <td align="center">连接诊断</td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/10-connect-timeout.png" width="220" alt="连不上电脑"></td>
+    <td><img src="screenshots/11-dark-settings.png" width="220" alt="深色模式 · 设置"></td>
+    <td><img src="screenshots/12-dark-sessions.png" width="220" alt="深色模式 · 会话"></td>
+  </tr>
+  <tr>
+    <td align="center">连不上电脑：可取消、可重试、可换机</td>
+    <td align="center">深色模式 · 设置</td>
+    <td align="center">深色模式 · 会话</td>
+  </tr>
+</table>
+
+> 截图取自 Android 模拟器；为便于公开发布，**会话标题与对话内容已做模糊处理**，界面结构与控件文案保持原样。
 
 ---
 
@@ -62,7 +114,7 @@ DSH Mobile 由三部分组成：一个 **DSH 插件**（电脑端，发布到 np
 | 目录 | 内容 | 技术栈 | 规模 |
 | --- | --- | --- | --- |
 | [`dsh-mobile-next/`](dsh-mobile-next/) | DSH 插件，发布到 npm | TypeScript + React | 5,472 行 |
-| [`flutter/`](flutter/) | Android 客户端 | Dart / Flutter | 17,854 行 |
+| [`flutter/`](flutter/) | Android 客户端 | Dart / Flutter | 19,305 行 |
 | [`native/`](native/) | iroh 原生传输层（实验性） | Rust | 7,041 行 |
 | [`prototype/`](prototype/) | 零依赖可点击原型 | 原生 HTML/CSS/JS | — |
 | [`design/`](design/) | 品牌资产与图标 | SVG / PNG | — |
@@ -93,7 +145,7 @@ lib/src/
 ├── protocol/     帧定义、会话操作、双载具路由
 ├── transport/    unary / mux / 连接编排 / iroh
 ├── auth/         配对、凭据存储、iroh 描述符
-├── ui/           10 个页面
+├── ui/           页面与共享卡片组件
 └── webview/      会话 WebView 与注入脚本
 ```
 
@@ -232,7 +284,7 @@ iroh 通道额外要求：QUIC 用 EndpointId 认证并提供传输层重放保�
 | --- | --- | --- |
 | 插件 | 12 个文件 / 140 个用例 | ✅ **147 passed, 2 skipped**（`pnpm test` 实测） |
 | 原生 | `iroh-core` + `iroh-host` | ✅ **56 passed, 0 failed**（`cargo test` 实测） |
-| 客户端 | 29 个文件 / 291 个用例 | `flutter analyze` 无问题；`flutter test` 在 CI 中执行 |
+| 客户端 | 33 个文件 / 320 个用例 | ✅ **320 passed**（`flutter test` 实测）；`flutter analyze` 无问题 |
 
 ```bash
 cd dsh-mobile-next && pnpm test          # 插件

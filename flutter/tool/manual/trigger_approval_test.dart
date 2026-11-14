@@ -20,9 +20,27 @@ import 'package:dsh_mobile/src/transport/io_transport.dart';
 import 'package:dsh_mobile/src/transport/mux.dart';
 import 'package:dsh_mobile/src/transport/unary.dart';
 
-const origin = 'https://192.168.0.102:3444';
+/// 网关地址从管理端点的 `/status` 读，别硬编码 IP —— 换网络后
+/// 电脑的局域网地址会变（192.168.0.x → 10.95.x.x），硬编码只会超时。
+/// 需要时可用 `--dart-define=DSH_ADMIN_PORT=xxxx` 覆盖 GUI 端口。
+const _adminPort = int.fromEnvironment('DSH_ADMIN_PORT', defaultValue: 52883);
 
-const adminBase = 'http://127.0.0.1:52883';
+final adminBase = 'http://127.0.0.1:$_adminPort';
+
+Future<String> _gatewayOrigin() async {
+  final client = HttpClient();
+  try {
+    final req = await client.getUrl(Uri.parse('$adminBase/mobile-access-next/status'));
+    final res = await req.close();
+    final body = jsonDecode(await res.transform(utf8.decoder).join())
+        as Map<String, Object?>;
+    final origin = body['origin'];
+    if (origin is String && origin.isNotEmpty) return origin;
+    throw StateError('网关没有 origin：$body');
+  } finally {
+    client.close();
+  }
+}
 
 /// 走真实配对链路拿设备会话 cookie：
 /// 管理端点签一次性 token → 网关 /pair 换 session cookie。
@@ -73,7 +91,7 @@ Future<String> _pairedCookie(Uri gateway) async {
 void main() {
   test('触发一条真实审批并保留', () async {
     HttpOverrides.global = null; // 允许真实网络（默认被 flutter_test 拦掉）
-    final uri = Uri.parse(origin);
+    final uri = Uri.parse(await _gatewayOrigin());
     final cookie = await _pairedCookie(uri);
     print('已配对，拿到设备会话');
     final ca = File('/Users/wuwenjing/.dsh/mobile-access-next/tls/ca.pem').readAsStringSync();

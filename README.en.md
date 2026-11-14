@@ -14,6 +14,7 @@ This is not "the desktop chat UI shrunk down." The phone is a **pager for your a
 
 ## Contents
 
+- [Screenshots](#screenshots)
 - [Architecture](#architecture)
 - [Components](#components)
 - [Getting started](#getting-started)
@@ -22,6 +23,57 @@ This is not "the desktop chat UI shrunk down." The phone is a **pager for your a
 - [Development](#development)
 - [Known limitations](#known-limitations)
 - [Third-party code and licenses](#third-party-code-and-licenses)
+
+---
+
+## Screenshots
+
+Two tabs: sessions and settings. The session list groups **by project** or **by state**, and each group header collapses. Sessions that need you and any **pending approval** are pinned to the top.
+
+<table>
+  <tr>
+    <td><img src="screenshots/01-sessions-project.png" width="220" alt="Sessions grouped by project"></td>
+    <td><img src="screenshots/02-sessions-state.png" width="220" alt="Sessions grouped by state"></td>
+    <td><img src="screenshots/07-approvals.png" width="220" alt="Pending approvals pinned on top"></td>
+  </tr>
+  <tr>
+    <td align="center">Sessions · by project</td>
+    <td align="center">Sessions · by state</td>
+    <td align="center">Approvals on top</td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/03-session-detail.png" width="220" alt="Session detail"></td>
+    <td><img src="screenshots/08-inbox.png" width="220" alt="Notification inbox"></td>
+    <td><img src="screenshots/09-pairing.png" width="220" alt="Add computer · scan to pair"></td>
+  </tr>
+  <tr>
+    <td align="center">Session detail (real DSH page in a mobile shell)</td>
+    <td align="center">Notification inbox</td>
+    <td align="center">Add computer</td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/04-settings.png" width="220" alt="Settings"></td>
+    <td><img src="screenshots/05-devices.png" width="220" alt="Paired devices"></td>
+    <td><img src="screenshots/06-diagnostics.png" width="220" alt="Connection diagnostics"></td>
+  </tr>
+  <tr>
+    <td align="center">Settings</td>
+    <td align="center">Paired devices</td>
+    <td align="center">Connection diagnostics</td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/10-connect-timeout.png" width="220" alt="Cannot reach the computer"></td>
+    <td><img src="screenshots/11-dark-settings.png" width="220" alt="Dark mode · settings"></td>
+    <td><img src="screenshots/12-dark-sessions.png" width="220" alt="Dark mode · sessions"></td>
+  </tr>
+  <tr>
+    <td align="center">Unreachable: cancel, retry, or pair another</td>
+    <td align="center">Dark mode · settings</td>
+    <td align="center">Dark mode · sessions</td>
+  </tr>
+</table>
+
+> Captured on an Android emulator. Session titles and conversation content are **blurred** so the repository can stay public; layout and UI copy are unchanged.
 
 ---
 
@@ -63,7 +115,7 @@ Key design decision: **the plugin never modifies DSH source.** It inserts itself
 | Directory | Contents | Stack | Size |
 | --- | --- | --- | --- |
 | [`dsh-mobile-next/`](dsh-mobile-next/) | DSH plugin, published to npm | TypeScript + React | 5,472 lines |
-| [`flutter/`](flutter/) | Android client | Dart / Flutter | 17,854 lines |
+| [`flutter/`](flutter/) | Android client | Dart / Flutter | 19,305 lines |
 | [`native/`](native/) | iroh native transport (experimental) | Rust | 7,041 lines |
 | [`prototype/`](prototype/) | Zero-dependency clickable prototype | Vanilla HTML/CSS/JS | — |
 | [`design/`](design/) | Brand assets and icons | SVG / PNG | — |
@@ -94,7 +146,7 @@ lib/src/
 ├── protocol/     frame definitions, session ops, dual-carrier routing
 ├── transport/    unary / mux / connection orchestration / iroh
 ├── auth/         pairing, credential store, iroh descriptor
-├── ui/           10 pages
+├── ui/           pages and shared card widgets
 └── webview/      session WebView and injected scripts
 ```
 
@@ -233,7 +285,7 @@ The iroh channel adds further requirements: QUIC authenticates EndpointIds and p
 | --- | --- | --- |
 | Plugin | 12 files / 140 cases | ✅ **147 passed, 2 skipped** (measured with `pnpm test`) |
 | Native | `iroh-core` + `iroh-host` | ✅ **56 passed, 0 failed** (measured with `cargo test`) |
-| Client | 29 files / 291 cases | `flutter analyze` clean; `flutter test` runs in CI |
+| Client | 33 files / 320 cases | ✅ **320 passed** (`flutter test`, measured); `flutter analyze` clean |
 
 ```bash
 cd dsh-mobile-next && pnpm test          # plugin
