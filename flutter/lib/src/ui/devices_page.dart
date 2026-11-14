@@ -165,12 +165,13 @@ class DevicesPage extends StatelessWidget {
             for (final d in current) ...[
               _DeviceCard(
                 device: d,
-                onReconnect: onReconnect == null
-                    ? null
-                    : () => onReconnect!(d),
+                onReconnect: onReconnect == null ? null : () => onReconnect!(d),
                 onDiagnostics: onDiagnostics == null
                     ? null
                     : () => onDiagnostics!(d),
+                onOpenActions: onOpenActions == null
+                    ? null
+                    : () => onOpenActions!(d),
               ),
               const SizedBox(height: Space.s6),
             ],
@@ -180,7 +181,7 @@ class DevicesPage extends StatelessWidget {
               for (final d in others) ...[
                 _DeviceRow(
                   device: d,
-                  onTap: () => onOpenActions?.call(d),
+                  onTap: onOpenActions == null ? null : () => onOpenActions!(d),
                   onReconnect: onReconnect == null
                       ? null
                       : () => onReconnect!(d),
@@ -252,10 +253,7 @@ class DevicesPage extends StatelessWidget {
 
   Widget _groupHeader(String title, Tokens t, AppTextStyles txt) => Padding(
     padding: const EdgeInsets.only(bottom: Space.s4),
-    child: Text(
-      title,
-      style: txt.chrome.copyWith(color: t.textSecondary),
-    ),
+    child: Text(title, style: txt.chrome.copyWith(color: t.textSecondary)),
   );
 }
 
@@ -298,7 +296,9 @@ String _statusLine(PairedDevice d, AppStrings strings) {
   switch (d.reachability) {
     case DeviceReachability.reachable:
       if (d.latencyMs != null) {
-        return strings.withArgs('devices.reachableLatency', {'n': d.latencyMs!});
+        return strings.withArgs('devices.reachableLatency', {
+          'n': d.latencyMs!,
+        });
       }
       return strings('devices.reachable');
     case DeviceReachability.checking:
@@ -317,17 +317,18 @@ String _statusLine(PairedDevice d, AppStrings strings) {
   }
 }
 
-
 class _DeviceCard extends StatelessWidget {
   const _DeviceCard({
     required this.device,
     this.onReconnect,
     this.onDiagnostics,
+    this.onOpenActions,
   });
 
   final PairedDevice device;
   final VoidCallback? onReconnect;
   final VoidCallback? onDiagnostics;
+  final VoidCallback? onOpenActions;
 
   @override
   Widget build(BuildContext context) {
@@ -377,6 +378,12 @@ class _DeviceCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (onOpenActions != null)
+                IconButton(
+                  onPressed: onOpenActions,
+                  icon: const Icon(Icons.more_horiz),
+                  tooltip: strings('devices.more'),
+                ),
             ],
           ),
           const SizedBox(height: Space.s3),
@@ -427,11 +434,7 @@ class _DeviceCard extends StatelessWidget {
 }
 
 class _DeviceRow extends StatelessWidget {
-  const _DeviceRow({
-    required this.device,
-    this.onTap,
-    this.onReconnect,
-  });
+  const _DeviceRow({required this.device, this.onTap, this.onReconnect});
 
   final PairedDevice device;
   final VoidCallback? onTap;

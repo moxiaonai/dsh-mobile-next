@@ -64,7 +64,6 @@ class _AppState extends State<_App> {
   // 在 _loadAppearance 里先解析路径再建。
   AppearanceStore? _store;
 
-
   @override
   void initState() {
     super.initState();
@@ -94,8 +93,7 @@ class _AppState extends State<_App> {
     return Builder(
       builder: (context) {
         // 系统亮度：用于 theme=system 时解析
-        final platformBrightness =
-            MediaQuery.platformBrightnessOf(context);
+        final platformBrightness = MediaQuery.platformBrightnessOf(context);
         final reduceMotion =
             MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 
@@ -112,46 +110,46 @@ class _AppState extends State<_App> {
         return AppLocaleScope(
           language: language,
           child: AppTheme(
-          tokens: tokens,
-          text: text,
-          child: MaterialApp(
-            title: 'DSH Mobile',
-            debugShowCheckedModeBanner: false,
-            // ⚠ 必须用 GlobalMaterialLocalizations（来自 flutter_localizations）。
-            //
-            // `DefaultMaterialLocalizations` **只支持英文**：locale 解析成 zh 时
-            // NavigationBar 找不到中文的 MaterialLocalizations，直接红屏
-            // （"No MaterialLocalizations found"）。实测踩过。
-            locale: Locale(language.name),
-            supportedLocales: const [Locale('zh'), Locale('en')],
-            localizationsDelegates: const [
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            theme: ThemeData(
-              useMaterial3: true,
-              brightness: brightness,
-              // 材质默认色也从蓝改成墨色：没显式写样式的控件不该再冒出蓝色
-              colorSchemeSeed: const Color(0xFF111827),
-            ),
-            builder: (context, child) {
-              // 动效偏好：reduced 时禁用所有隐式动画
-              final media = MediaQuery.of(context);
-              return MediaQuery(
-                data: media.copyWith(
-                  disableAnimations: _appearance.resolveReduceMotion(
-                    reduceMotion,
+            tokens: tokens,
+            text: text,
+            child: MaterialApp(
+              title: 'DSH Mobile',
+              debugShowCheckedModeBanner: false,
+              // ⚠ 必须用 GlobalMaterialLocalizations（来自 flutter_localizations）。
+              //
+              // `DefaultMaterialLocalizations` **只支持英文**：locale 解析成 zh 时
+              // NavigationBar 找不到中文的 MaterialLocalizations，直接红屏
+              // （"No MaterialLocalizations found"）。实测踩过。
+              locale: Locale(language.name),
+              supportedLocales: const [Locale('zh'), Locale('en')],
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              theme: ThemeData(
+                useMaterial3: true,
+                brightness: brightness,
+                // 材质默认色也从蓝改成墨色：没显式写样式的控件不该再冒出蓝色
+                colorSchemeSeed: const Color(0xFF111827),
+              ),
+              builder: (context, child) {
+                // 动效偏好：reduced 时禁用所有隐式动画
+                final media = MediaQuery.of(context);
+                return MediaQuery(
+                  data: media.copyWith(
+                    disableAnimations: _appearance.resolveReduceMotion(
+                      reduceMotion,
+                    ),
                   ),
-                ),
-                child: child ?? const SizedBox.shrink(),
-              );
-            },
-            home: _Shell(
-              appearance: _appearance,
-              onAppearanceChanged: _updateAppearance,
+                  child: child ?? const SizedBox.shrink(),
+                );
+              },
+              home: _Shell(
+                appearance: _appearance,
+                onAppearanceChanged: _updateAppearance,
+              ),
             ),
-          ),
           ),
         );
       },
@@ -160,10 +158,7 @@ class _AppState extends State<_App> {
 }
 
 class _Shell extends StatefulWidget {
-  const _Shell({
-    required this.appearance,
-    required this.onAppearanceChanged,
-  });
+  const _Shell({required this.appearance, required this.onAppearanceChanged});
 
   final AppearanceState appearance;
   final ValueChanged<AppearanceState> onAppearanceChanged;
@@ -224,6 +219,18 @@ class _ShellState extends State<_Shell> {
 
   /// 已配对设备（从凭据存储加载）。
   List<DeviceCredential> _credentials = const [];
+  DeviceCredential? _currentCredential;
+  String? _connectingDeviceId;
+  final ValueNotifier<int> _deviceChanges = ValueNotifier<int>(0);
+  StreamSubscription<dynamic>? _connectionStateSub;
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    // Pushed routes are not descendants of this State's build subtree.
+    // Notify the device route as well, including updates while pairing is on top.
+    _deviceChanges.value++;
+  }
 
   /// 配对流程（懒创建）。
   PairingFlow? _pairingFlow;
@@ -262,15 +269,16 @@ class _ShellState extends State<_Shell> {
   Future<void> _openDevices() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => Scaffold(
-          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-          body: DevicesPage(
+        builder: (_) => AnimatedBuilder(
+          animation: _deviceChanges,
+          builder: (routeContext, _) => DevicesPage(
             devices: _deviceList(),
-            onAdd: _openPairing,
-            onReconnect: (_) => _reconnect(),
+            onAdd: _connecting ? null : _openPairing,
+            onReconnect: _connecting ? null : _reconnectDevice,
             onDiagnostics: (d) => _openDiagnostics(d),
+            onOpenActions: _connecting ? null : _openDeviceActions,
             onRevokeAll: _revokeAllPairings,
-            onBack: () => Navigator.of(context).maybePop(),
+            onBack: () => Navigator.of(routeContext).maybePop(),
           ),
         ),
       ),
@@ -311,7 +319,10 @@ class _ShellState extends State<_Shell> {
     );
     if (confirmed != true || !mounted) return;
 
-    final store = await createCredentialStoreAsync();
+    setState(() => _connecting = true);
+    _connectionRequests.invalidate();
+    await _pairingFlow?.cancel();
+    final store = _pairingFlow?.store ?? await createCredentialStoreAsync();
     await store.clear();
     if (!mounted) return;
 
@@ -324,6 +335,10 @@ class _ShellState extends State<_Shell> {
     if (!mounted) return;
     setState(() {
       _credentials = const [];
+      _currentCredential = null;
+      _connecting = false;
+      _connectingDeviceId = null;
+      _timedOut = false;
       _conn = null;
       _transport = null;
       _jobs = null;
@@ -345,61 +360,96 @@ class _ShellState extends State<_Shell> {
   ///
   /// 报告只由**本机可观测的事实**组装：网关连接、电脑可达性、电脑侧证书
   /// 信任（App 拿不到 → 标「未检查」，不假装通过）；「手机路径」一律 info。
-  Future<void> _openDiagnostics(
-    PairedDevice device, {
-    bool replace = false,
-  }) async {
-    final strings = AppStrings.of(context);
-    final conn = _conn;
-
-    final connChecks = <DiagnosticCheck>[
-      DiagnosticCheck(
-        label: strings('diag.connState'),
-        status: conn == null ? CheckStatus.error : CheckStatus.ok,
-        detail: conn == null
-            ? strings('diag.connDown')
-            : '${conn.origin.host}:${conn.origin.port}',
-      ),
-      DiagnosticCheck(
-        label: strings('diag.deviceReachable'),
-        status: device.reachability == DeviceReachability.reachable
-            ? CheckStatus.ok
-            : CheckStatus.warning,
-        detail: device.reachability.label(strings),
-      ),
-      DiagnosticCheck(
-        label: strings('diag.tlsTrust'),
-        status: CheckStatus.info,
-        detail: strings('diag.tlsTrustHint'),
-      ),
-    ];
-
-    final report = DiagnosticReport(
-      generatedAt: DateTime.now(),
-      layers: [
-        DiagnosticLayer(title: strings('diag.connection'), checks: connChecks),
-        DiagnosticLayer(
-          title: strings('diag.phonePath'),
-          checks: [phonePathCheck(strings)],
-        ),
-      ],
-    );
-
+  Future<void> _openDiagnostics(PairedDevice device) async {
     if (!mounted) return;
+    final strings = AppStrings.of(context);
     final nav = Navigator.of(context);
-    final route = MaterialPageRoute<void>(
-      builder: (_) => DiagnosticsPage(
-        report: report,
-        onRun: () => _openDiagnostics(device, replace: true),
-        onBack: () => nav.maybePop(),
+
+    Future<DiagnosticReport> run() async {
+      // 每次重新读取设备与连接，不能沿用打开页面时的 reachability 快照。
+      final before = _deviceList().where((d) => d.id == device.id).firstOrNull;
+      final conn = _conn;
+      final targetsConnection =
+          before?.isCurrent == true &&
+          conn != null &&
+          before!.origin == '${conn.origin.host}:${conn.origin.port}';
+      bool? reachable;
+      if (targetsConnection && conn.state.name == 'connected') {
+        try {
+          // 只探测已绑定目标的连接，不把另一台电脑的成功算给此设备。
+          await conn.unary
+              .call(
+                'session/list',
+                args: const {'_request': <String, Object?>{}},
+                timeoutOverride: _connectTimeout,
+              )
+              .timeout(_connectTimeout);
+          reachable = true;
+        } catch (_) {
+          // 不将异常原文/地址写入可复制报告。
+          reachable = false;
+        }
+      }
+      final latest = _deviceList().where((d) => d.id == device.id).firstOrNull;
+      final stillTargetsConnection =
+          targetsConnection &&
+          identical(conn, _conn) &&
+          latest?.isCurrent == true &&
+          latest!.origin == '${conn.origin.host}:${conn.origin.port}';
+      final connected =
+          stillTargetsConnection && conn.state.name == 'connected';
+      if (!stillTargetsConnection) reachable = null;
+      return DiagnosticReport(
+        generatedAt: DateTime.now(),
+        layers: [
+          DiagnosticLayer(
+            title: strings('diag.connection'),
+            checks: [
+              DiagnosticCheck(
+                label: strings('diag.connState'),
+                status: connected ? CheckStatus.ok : CheckStatus.error,
+                detail: connected
+                    ? strings('diag.passed')
+                    : strings('diag.connDown'),
+              ),
+              DiagnosticCheck(
+                label: strings('diag.deviceReachable'),
+                status: reachable == true
+                    ? CheckStatus.ok
+                    : reachable == false
+                    ? CheckStatus.warning
+                    : CheckStatus.info,
+                detail: reachable == true
+                    ? DeviceReachability.reachable.label(strings)
+                    : reachable == false
+                    ? DeviceReachability.unreachable.label(strings)
+                    : strings('diag.unknown'),
+              ),
+              DiagnosticCheck(
+                label: strings('diag.tlsTrust'),
+                status: CheckStatus.info,
+                detail: strings('diag.tlsTrustHint'),
+              ),
+            ],
+          ),
+          DiagnosticLayer(
+            title: strings('diag.phonePath'),
+            checks: [phonePathCheck(strings)],
+          ),
+        ],
+      );
+    }
+
+    await nav.push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => DiagnosticsRunner(
+          run: run,
+          onBack: () => nav.maybePop(),
+          onCopyReport: (text) =>
+              unawaited(Clipboard.setData(ClipboardData(text: text))),
+        ),
       ),
     );
-    // 「重新检查」用 pushReplacement：否则每点一次都压一层，返回要连按好几次
-    if (replace) {
-      await nav.pushReplacement<void, void>(route);
-    } else {
-      await nav.push<void>(route);
-    }
   }
 
   /// 审批决策：允许 / 拒绝。
@@ -523,7 +573,9 @@ class _ShellState extends State<_Shell> {
     _caPem ??= await loadBundledCaPem();
     _pairingFlow ??= PairingFlow(store: store, trustedCaPem: _caPem);
     if (saved.isNotEmpty) {
-      setState(() => _status = AppStrings.of(context)('conn.reconnectingPaired'));
+      setState(
+        () => _status = AppStrings.of(context)('conn.reconnectingPaired'),
+      );
       await _reconnect(silent: true);
       debugPrint('[boot] 重连结果 conn=${_conn != null} sessionId=$_sessionId');
       if (_conn != null) return;
@@ -615,7 +667,6 @@ class _ShellState extends State<_Shell> {
             );
           });
         }
-
       });
 
       final browser = SessionBrowser(unary: conn.unary, mux: conn.mux);
@@ -665,13 +716,137 @@ class _ShellState extends State<_Shell> {
     _pairingFlow?.dispose();
     _conn?.dispose();
     _transport?.close();
+    unawaited(_connectionStateSub?.cancel());
+    _deviceChanges.dispose();
     super.dispose();
   }
 
-  /// 设备页列表：来自凭据存储。
-  ///
-  /// 当前连接的那台标记为「当前」。可达性暂按「已连接 = 可达」简化 ——
-  /// 真实探测需要逐台建连，代价大且会干扰当前连接。
+  String _credentialId(DeviceCredential c) =>
+      '${c.origin}#${c.instanceId ?? c.deviceId}';
+
+  bool _isCurrentCredential(DeviceCredential c) =>
+      _conn != null &&
+      _conn!.origin == c.origin &&
+      (_currentCredential != null
+          ? _credentialId(_currentCredential!) == _credentialId(c)
+          : _credentials.where((item) => item.origin == c.origin).length == 1);
+
+  DeviceCredential? _credentialForDevice(PairedDevice device) {
+    for (final credential in _credentials) {
+      if (_credentialId(credential) == device.id) return credential;
+    }
+    return null;
+  }
+
+  Future<void> _reconnectDevice(PairedDevice device) async {
+    final credential = _credentialForDevice(device);
+    if (credential == null) return;
+    await _reconnect(credential: credential);
+  }
+
+  Future<void> _openDeviceActions(PairedDevice device) async {
+    final strings = AppStrings.of(context);
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(title: Text(device.name)),
+            ListTile(
+              leading: const Icon(Icons.swap_horiz),
+              title: Text(strings('devices.switch')),
+              onTap: () => Navigator.of(sheetContext).pop('connect'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.health_and_safety_outlined),
+              title: Text(strings('devices.diagnostics')),
+              onTap: () => Navigator.of(sheetContext).pop('diagnostics'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.qr_code_scanner),
+              title: Text(strings('devices.repair')),
+              onTap: () => Navigator.of(sheetContext).pop('pair'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.link_off),
+              title: Text(strings('devices.unpair')),
+              onTap: () => Navigator.of(sheetContext).pop('remove'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    switch (action) {
+      case 'connect':
+        await _reconnectDevice(device);
+      case 'diagnostics':
+        await _openDiagnostics(device);
+      case 'pair':
+        await _openPairing();
+      case 'remove':
+        await _removeDevice(device);
+    }
+  }
+
+  Future<void> _removeDevice(PairedDevice device) async {
+    final credential = _credentialForDevice(device);
+    if (credential == null) return;
+    final strings = AppStrings.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings('devices.unpair')),
+        content: Text(strings('devices.unpairHint')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(strings('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(strings('devices.revokeAllConfirm')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _connecting = true);
+    _connectionRequests.invalidate();
+    await _pairingFlow?.cancel();
+    final store = _pairingFlow?.store ?? await createCredentialStoreAsync();
+    await store.remove(credential);
+    if (!mounted) return;
+    if (_isCurrentCredential(credential)) {
+      await _eventsSub?.cancel();
+      _eventsSub = null;
+      _eventsConn = null;
+      await _conn?.dispose();
+      _transport?.close();
+      if (!mounted) return;
+      setState(() {
+        _conn = null;
+        _currentCredential = null;
+        _transport = null;
+        _jobs = null;
+        _questions = null;
+        _approvals = null;
+        _browser = null;
+        _sessionId = null;
+        _openSession = null;
+        _approvalList.clear();
+        _error = null;
+      });
+    }
+    setState(() {
+      _connecting = false;
+      _connectingDeviceId = null;
+    });
+    await _reloadCredentials();
+  }
+
+  /// 设备页列表：只有实际连接设备显示可达；连接中的目标显示检测中。
   List<PairedDevice> _deviceList() {
     if (_credentials.isEmpty) {
       // 没有持久化凭据时（如调试 cookie 注入），仍显示当前连接
@@ -681,7 +856,9 @@ class _ShellState extends State<_Shell> {
           id: 'current',
           name: AppStrings.of(context)('conn.currentPc'),
           origin: '${_conn!.origin.host}:${_conn!.origin.port}',
-          reachability: DeviceReachability.reachable,
+          reachability: _conn!.state.name == 'connected'
+              ? DeviceReachability.reachable
+              : DeviceReachability.unreachable,
           isCurrent: true,
         ),
       ];
@@ -689,12 +866,22 @@ class _ShellState extends State<_Shell> {
     return [
       for (var i = 0; i < _credentials.length; i++)
         PairedDevice(
-          id: '${_credentials[i].origin}#${_credentials[i].instanceId ?? i}',
-          name: _credentials[i].label ??
+          id: _credentialId(_credentials[i]),
+          name:
+              _credentials[i].label ??
               '${_credentials[i].origin.host}:${_credentials[i].origin.port}',
-          origin: '${_credentials[i].origin.host}:${_credentials[i].origin.port}',
-          reachability: DeviceReachability.reachable,
-          isCurrent: i == 0,
+          origin:
+              '${_credentials[i].origin.host}:${_credentials[i].origin.port}',
+          reachability: _connectingDeviceId == _credentialId(_credentials[i])
+              ? DeviceReachability.checking
+              : _isCurrentCredential(_credentials[i]) &&
+                    _conn?.state.name == 'connected'
+              ? DeviceReachability.reachable
+              : DeviceReachability.unreachable,
+          isCurrent: _isCurrentCredential(_credentials[i]),
+          via: _credentials[i].transport == null
+              ? DeviceChannel.lan
+              : DeviceChannel.remote,
         ),
     ];
   }
@@ -717,6 +904,10 @@ class _ShellState extends State<_Shell> {
     if (identical(_eventsConn, conn)) return;
     unawaited(_eventsSub?.cancel());
     _eventsConn = conn;
+    unawaited(_connectionStateSub?.cancel());
+    _connectionStateSub = conn.stateChanges.listen((_) {
+      if (mounted && identical(_conn, conn)) setState(() {});
+    });
     final clientId = conn.eventsClientId;
     if (clientId != null) _approvals?.setClientId(clientId);
     _eventsSub = conn.events.listen((event) {
@@ -750,7 +941,8 @@ class _ShellState extends State<_Shell> {
   Future<void> _hydrateSessions(DshConnection conn) async {
     _subscribeEvents(conn);
     try {
-      final browser = _browser ?? SessionBrowser(unary: conn.unary, mux: conn.mux);
+      final browser =
+          _browser ?? SessionBrowser(unary: conn.unary, mux: conn.mux);
       // 加超时：unary 默认 30s，对用户来说就是「一直转圈」。
       // 8 秒拿不到列表就按失败处理，把界面切到可操作状态。
       final sessions = await browser.list().timeout(const Duration(seconds: 8));
@@ -798,9 +990,7 @@ class _ShellState extends State<_Shell> {
     if (browser == null) return null;
     try {
       // 10 秒超时：创建要落盘，比 list 慢一点，但不能无限等。
-      final id = await browser
-          .create()
-          .timeout(const Duration(seconds: 10));
+      final id = await browser.create().timeout(const Duration(seconds: 10));
       if (!mounted) return null;
       // 直接进详情。构造一个最小 SessionSummary：
       // 详情页只用 id（拼 WebView）与 title/running（渲染 header）。
@@ -826,7 +1016,7 @@ class _ShellState extends State<_Shell> {
 
   /// 重新读凭据存储（配对成功 / 撤销后调用）。
   Future<void> _reloadCredentials() async {
-    final store = await createCredentialStoreAsync();
+    final store = _pairingFlow?.store ?? await createCredentialStoreAsync();
     final creds = await store.loadAll();
     if (!mounted) return;
     setState(() => _credentials = creds);
@@ -852,7 +1042,9 @@ class _ShellState extends State<_Shell> {
             pairingPageActive = false;
             final request = pairingRequest;
             // A popped old route must not cancel a newer reconnect request.
-            if (!pairingCommitted && request != null && _connectionRequests.cancel(request)) {
+            if (!pairingCommitted &&
+                request != null &&
+                _connectionRequests.cancel(request)) {
               unawaited(flow.cancel());
             }
           },
@@ -862,11 +1054,16 @@ class _ShellState extends State<_Shell> {
             final request = _connectionRequests.begin();
             pairingRequest = request;
             pairingCommitted = false;
-            bool owns() => mounted && pairingPageActive && _connectionRequests.owns(request);
+            bool owns() =>
+                mounted &&
+                pairingPageActive &&
+                _connectionRequests.owns(request);
             // 直接传描述符：不要再拼成字符串重新解析（有损往返，会丢 token）
             final outcome = await flow.runDescriptor(descriptor);
             if (!owns()) {
-              if (outcome is PairingSucceeded) await outcome.connection.dispose();
+              if (outcome is PairingSucceeded) {
+                await outcome.connection.dispose();
+              }
               throw const PairingException('pairing cancelled');
             }
             if (outcome is PairingFailed) {
@@ -889,6 +1086,9 @@ class _ShellState extends State<_Shell> {
               setState(() {
                 _credentials = creds;
                 _conn = ok.connection;
+                _currentCredential = ok.credential;
+                _connecting = false;
+                _connectingDeviceId = null;
                 _jobs = JobCenter(
                   unary: ok.connection.unary,
                   mux: ok.connection.mux,
@@ -937,14 +1137,22 @@ class _ShellState extends State<_Shell> {
   ///
   /// 超时必须显式 `flow.cancel()` 掐掉底层尝试，否则它继续跑，
   /// 下一次重连会和这次抢同一个连接。
-  Future<PairingOutcome> _attemptReconnect(PairingFlow flow) async {
+  Future<PairingOutcome> _attemptReconnect(
+    PairingFlow flow,
+    DeviceCredential credential,
+    int request,
+  ) async {
     _timedOut = false;
     final timeoutText = AppStrings.of(context)('conn.timeout');
     try {
-      return await flow
-          .reconnect(_credentials.first)
-          .timeout(_connectTimeout);
+      return await flow.reconnect(credential).timeout(_connectTimeout);
     } on TimeoutException {
+      if (!mounted || !_connectionRequests.owns(request)) {
+        return const PairingFailed(
+          failure: PairingFailure.network,
+          message: 'cancelled',
+        );
+      }
       _timedOut = true;
       await flow.cancel();
       return PairingFailed(
@@ -965,6 +1173,7 @@ class _ShellState extends State<_Shell> {
     if (!mounted) return;
     setState(() {
       _connecting = false;
+      _connectingDeviceId = null;
       _error = null;
       _timedOut = false;
       _jobs = null;
@@ -980,11 +1189,15 @@ class _ShellState extends State<_Shell> {
     await _openPairing();
   }
 
-  /// 用第一台已配对设备重连。
+  /// 重连点选设备；首屏默认使用当前设备或第一台已配对设备。
   ///
   /// `silent`：启动时自动重连不弹「已重新连接」——那时 locale 还没加载完，
   /// 弹出来的会是英文兜底文案，且用户本来就没点任何东西。
-  Future<void> _reconnect({bool silent = false}) async {
+  Future<void> _reconnect({
+    bool silent = false,
+    DeviceCredential? credential,
+  }) async {
+    if (_connecting) return;
     final flow = _pairingFlow;
     if (flow == null || _credentials.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -997,9 +1210,12 @@ class _ShellState extends State<_Shell> {
     // 先取 messenger 与文案：await 之后不能再碰 context（会跨异步间隙）。
     final messenger = ScaffoldMessenger.of(context);
     final reconnectedText = AppStrings.of(context)('conn.reconnected');
-    setState(() => _connecting = true);
-    final outcome = await _attemptReconnect(flow);
-    if (mounted) setState(() => _connecting = false);
+    final target = credential ?? _currentCredential ?? _credentials.first;
+    setState(() {
+      _connecting = true;
+      _connectingDeviceId = _credentialId(target);
+    });
+    final outcome = await _attemptReconnect(flow, target, request);
     if (!owns()) {
       if (outcome is PairingSucceeded) await outcome.connection.dispose();
       return;
@@ -1012,6 +1228,11 @@ class _ShellState extends State<_Shell> {
       }
       setState(() {
         _conn = outcome.connection;
+        _currentCredential = outcome.credential;
+        _openSession = null;
+        _showJobs = false;
+        _sessionId = null;
+        _approvalList.clear();
         _jobs = JobCenter(
           unary: outcome.connection.unary,
           mux: outcome.connection.mux,
@@ -1034,12 +1255,24 @@ class _ShellState extends State<_Shell> {
       // 重连后拉一次会话，填上 _sessionId（否则界面判据仍不满足）
       await _hydrateSessions(outcome.connection);
       if (!owns()) return;
+      final creds = await flow.store.loadAll();
+      if (!owns()) return;
+      setState(() {
+        _credentials = creds;
+        _connecting = false;
+        _connectingDeviceId = null;
+      });
       if (!silent) {
         messenger.showSnackBar(SnackBar(content: Text(reconnectedText)));
       }
     } else {
       final failed = outcome as PairingFailed;
-      if (mounted) setState(() => _connecting = false);
+      if (mounted) {
+        setState(() {
+          _connecting = false;
+          _connectingDeviceId = null;
+        });
+      }
       // ⚠ 重连失败必须把界面从「连接中」切走，否则用户看到的是无限转圈，
       // 而真正的失败原因只在一条会自动消失的 SnackBar 里。
       if (mounted) {
@@ -1153,18 +1386,12 @@ class _ShellState extends State<_Shell> {
                   ? AppStrings.of(context)('conn.timeout')
                   : _error == null
                   ? AppStrings.of(context)('conn.offline')
-                  : FriendlyError.from(
-                      _error!,
-                      AppStrings.of(context),
-                    ).title,
+                  : FriendlyError.from(_error!, AppStrings.of(context)).title,
               status: _timedOut
                   ? AppStrings.of(context)('conn.timeoutHint')
                   : _error == null
                   ? _status
-                  : FriendlyError.from(
-                      _error!,
-                      AppStrings.of(context),
-                    ).hint,
+                  : FriendlyError.from(_error!, AppStrings.of(context)).hint,
               onRetry: _boot,
               onPairNew: _pairNewDevice,
               onDevices: _openDevices,
@@ -1195,12 +1422,9 @@ class _ShellState extends State<_Shell> {
           // ⚠ 必须整体回传，不能只取 fontBase ——
           // 初版写成 `onFontChanged(s.fontBase)`，导致主题/动效改动被丢弃，
           // 点「浅色/深色」毫无反应。
-          onChanged: (s) => widget.onAppearanceChanged(
-            AppearanceState.fromSettings(s),
-          ),
-          onReset: () => widget.onAppearanceChanged(
-            const AppearanceState(),
-          ),
+          onChanged: (s) =>
+              widget.onAppearanceChanged(AppearanceState.fromSettings(s)),
+          onReset: () => widget.onAppearanceChanged(const AppearanceState()),
         ),
       };
     }
@@ -1319,7 +1543,6 @@ class _ShellState extends State<_Shell> {
     }
   }
 
-
   /// 桌面调试用：读本机凭据铸造 cookie。
   ///
   /// 路径从 `$HOME` 推导，不写死某台机器的用户名。
@@ -1327,9 +1550,7 @@ class _ShellState extends State<_Shell> {
     try {
       final home = Platform.environment['HOME'];
       if (home == null || home.isEmpty) return null;
-      final yaml = File(
-        '$home/.dsh/.credentials.yaml',
-      ).readAsStringSync();
+      final yaml = File('$home/.dsh/.credentials.yaml').readAsStringSync();
       final m = RegExp(
         r'client-connection/browser-session:[\s\S]*?secret:\s*(\S+)',
       ).firstMatch(yaml);
@@ -1351,9 +1572,7 @@ class _ShellState extends State<_Shell> {
           )
           .replaceAll('=', '');
       final sig = base64Url
-          .encode(
-            Hmac(sha256, secret).convert(utf8.encode(body)).bytes,
-          )
+          .encode(Hmac(sha256, secret).convert(utf8.encode(body)).bytes)
           .replaceAll('=', '');
       final name =
           'dsh-auth-${base64Url.encode(sha256.convert(utf8.encode(authority)).bytes).replaceAll('=', '')}';
@@ -1363,7 +1582,6 @@ class _ShellState extends State<_Shell> {
     }
   }
 }
-
 
 /// 未配对时的首屏。
 ///

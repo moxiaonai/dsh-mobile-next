@@ -70,8 +70,7 @@ class AppStrings {
   final Map<String, String> _values;
 
   /// 取文案。缺失时回退到中文，再缺则返回键名（便于发现漏翻）。
-  String call(String key) =>
-      _values[key] ?? _zh[key] ?? key;
+  String call(String key) => _values[key] ?? _zh[key] ?? key;
 
   /// 带占位符的文案：`t('tasks.count', {'n': '5'})`。
   ///
@@ -175,8 +174,7 @@ class AppStrings {
     'appearance.preview.sample': '预览：这是一段正文示例。Aa 0123456789',
     'appearance.reset': '恢复默认',
     'appearance.reset.confirmTitle': '恢复默认外观？',
-    'appearance.reset.confirmNote':
-        '字号回到 16、缩放 100%，主题与语言跟随系统。不会影响任务和会话。',
+    'appearance.reset.confirmNote': '字号回到 16、缩放 100%，主题与语言跟随系统。不会影响任务和会话。',
     'appearance.reset.done': '已恢复默认外观',
     'appearance.increase': '增加',
     'appearance.decrease': '减少',
@@ -213,6 +211,9 @@ class AppStrings {
     'devices.diagnostics': '连接诊断',
     'devices.repair': '重新配对',
     'devices.more': '更多操作',
+    'devices.switch': '切换到这台电脑',
+    'devices.unpair': '撤销这台电脑的配对',
+    'devices.unpairHint': '删除本机保存的这台电脑的配对凭据；如果正在连接这台电脑，也会断开连接。电脑上的设备记录仍保留。',
     'devices.reachable': '可达',
     'devices.checking': '检测中',
     'devices.unreachable': '暂不可达',
@@ -461,8 +462,7 @@ class AppStrings {
     'common.failed': 'Failed',
     'common.empty': 'Nothing here',
     'unpaired.title': 'No computer paired yet',
-    'unpaired.hint':
-        'Open the "Mobile Access" panel on your computer to generate a QR code,\nthen scan it with this phone.',
+    'unpaired.hint': 'Open the "Mobile Access" panel on your computer to generate a QR code,\nthen scan it with this phone.',
     'unpaired.scan': 'Scan to pair',
     'unpaired.retry': 'Retry connecting',
     'connect.connecting': 'Connecting…',
@@ -496,11 +496,11 @@ class AppStrings {
     'appearance.theme.light': 'Light',
     'appearance.theme.dark': 'Dark',
     'appearance.language': 'Language',
-    'appearance.language.hint': 'Affects both the app and the embedded DSH page',
+    'appearance.language.hint':
+        'Affects both the app and the embedded DSH page',
     'appearance.font': 'Font size',
     'appearance.font.label': 'Body text size',
-    'appearance.font.hint':
-        'Affects body text, code and options; labels keep a minimum readable size',
+    'appearance.font.hint': 'Affects body text, code and options; labels keep a minimum readable size',
     'appearance.scale': 'Page scale',
     'appearance.scale.hint': 'Android only; 80–125% in steps of 5',
     'appearance.motion': 'Motion',
@@ -519,7 +519,8 @@ class AppStrings {
     'tasks.title': 'Tasks',
     'tasks.count': '{n} sessions',
     'tasks.empty': 'No tasks yet',
-    'tasks.emptyHint': 'Start a conversation on your computer and it shows up here',
+    'tasks.emptyHint':
+        'Start a conversation on your computer and it shows up here',
     'tasks.needsYou': 'Needs you',
     'tasks.running': 'Running',
     'tasks.other': 'Other',
@@ -546,6 +547,9 @@ class AppStrings {
     'devices.diagnostics': 'Diagnostics',
     'devices.repair': 'Pair again',
     'devices.more': 'More actions',
+    'devices.switch': 'Switch to this computer',
+    'devices.unpair': 'Unpair this computer',
+    'devices.unpairHint': 'Deletes the pairing for this computer saved on this phone and disconnects it if active. The device entry on your computer stays.',
     'devices.reachable': 'Reachable',
     'devices.checking': 'Checking',
     'devices.unreachable': 'Unreachable',
@@ -564,7 +568,8 @@ class AppStrings {
     'sessions.noMatchHint': 'Try a different keyword',
     'sessions.agentReady': 'Agent ready',
     'sessions.new': 'New session',
-    'sessions.createFailed': 'Could not create a session — check the connection and retry',
+    'sessions.createFailed':
+        'Could not create a session — check the connection and retry',
     'sessions.createFailedWhy': 'Failed to create session: {e}',
     'sessions.created': 'Session created',
     'sessions.rowLabel': 'Session {id}',
@@ -613,24 +618,23 @@ class AppStrings {
     'question.submit': 'Submit',
     'question.title': 'Your answer is needed',
     'error.network': 'Network unreachable',
-    'error.networkHint':
-        'Make sure the phone and computer share a Wi-Fi and mobile access is on',
+    'error.networkHint': 'Make sure the phone and computer share a Wi-Fi and mobile access is on',
     'error.timeout': 'Connection timed out',
     'error.timeoutHint': 'The computer may be busy, or the network is unstable',
     'error.auth': 'Pairing expired',
-    'error.authHint': 'Generate a new pairing QR code on your computer and pair again',
+    'error.authHint':
+        'Generate a new pairing QR code on your computer and pair again',
     'error.unknown': 'Something went wrong',
     'error.detail': 'Show details',
     'error.hideDetail': 'Hide details',
     'pair.back': 'Back',
-    'pair.securityNote':
-        'Only connect to DSH on your own computer. Once paired, the phone can operate all sessions on it.',
+    'pair.securityNote': 'Only connect to DSH on your own computer. Once paired, the phone can operate all sessions on it.',
     'pair.cameraUnavailable': 'Camera unavailable',
-    'pair.cameraHint':
-        'Allow camera access in system settings,\nor use "paste pairing link" below.',
+    'pair.cameraHint': 'Allow camera access in system settings,\nor use "paste pairing link" below.',
     'pair.scanning': 'Scanning…',
     'pair.idle': 'Not scanning yet',
-    'pair.startScan': 'Tap the button below to open the camera\nand scan the pairing QR code',
+    'pair.startScan':
+        'Tap the button below to open the camera\nand scan the pairing QR code',
     'pair.retry': 'Retry',
     'pair.useLink': 'Use link instead',
     'devices.reachableLatency': 'Reachable · ~{n}ms',
@@ -674,15 +678,19 @@ class AppStrings {
     'err.network.title': 'Network unavailable',
     'err.network.hint': 'Check the phone Wi-Fi or mobile network.',
     'err.connect.title': "Can't reach the computer",
-    'err.connect.hint': 'Make sure DSH is running and both are on the same network.',
+    'err.connect.hint':
+        'Make sure DSH is running and both are on the same network.',
     'err.timeout.title': 'Connection timed out',
-    'err.timeout.hint': 'The network may be slow or the computer is busy. Try again.',
+    'err.timeout.hint':
+        'The network may be slow or the computer is busy. Try again.',
     'err.auth.title': 'Pairing expired',
     'err.auth.hint': 'Scan the pairing QR code on your computer again.',
     'err.rejected.title': 'The computer rejected this request',
-    'err.rejected.hint': 'The access config may have changed. Check Diagnostics.',
+    'err.rejected.hint':
+        'The access config may have changed. Check Diagnostics.',
     'err.host.title': 'The computer failed to handle it',
-    'err.host.hint': 'This is an internal DSH error. Retry or check Diagnostics.',
+    'err.host.hint':
+        'This is an internal DSH error. Retry or check Diagnostics.',
     'err.mux.title': 'Connection lost',
     'err.mux.hint': 'Reconnecting. If it keeps failing, check the computer.',
     'err.generic.title': 'Something went wrong',
@@ -697,8 +705,7 @@ class AppStrings {
     'diag.reportTitle': 'DSH connection diagnostics report',
     'diag.reportGenerated': 'Generated at {at}',
     'diag.reportConclusion': 'Conclusion: {name}',
-    'diag.reportRedacted':
-        'Note: this report is redacted and contains no credentials or full addresses.',
+    'diag.reportRedacted': 'Note: this report is redacted and contains no credentials or full addresses.',
     'diag.connectTitle': 'Diagnostics',
     'diag.connection': 'Connection',
     'diag.phonePath': 'Phone path',
@@ -706,18 +713,17 @@ class AppStrings {
     'diag.connDown': 'Not connected: no live connection',
     'diag.deviceReachable': 'Computer reachable',
     'diag.tlsTrust': 'Certificate trust on computer',
-    'diag.tlsTrustHint':
-        'The app cannot check certificate trust on the computer; run diagnostics there',
+    'diag.tlsTrustHint': 'The app cannot check certificate trust on the computer; run diagnostics there',
     'diag.checking': 'Checking…',
     'diag.start': 'Start check',
     'diag.summary': '{ok} passed · {warn} attention · {err} failed',
     'diag.generatedAt': 'Generated at {at} · phone path not verified',
     'diag.needsDevice': 'Verify on the phone',
-    'diag.deviceOnly':
-        'Pairing page, assets and WebSocket can only be confirmed on a real device',
+    'diag.deviceOnly': 'Pairing page, assets and WebSocket can only be confirmed on a real device',
     'jobout.title': 'Job output',
     'jobout.empty': 'This job has no output',
-    'jobout.evicted': 'Middle output was evicted; the full content is unavailable',
+    'jobout.evicted':
+        'Middle output was evicted; the full content is unavailable',
     'jobout.running': 'Running…',
     'jobout.toLatest': 'Jump to latest',
     'jobout.toLatestN': 'Jump to latest (+{n})',
@@ -750,7 +756,8 @@ class AppStrings {
     'conn.connecting': 'Connecting…',
     'conn.reconnectingPaired': 'Connecting to paired computer…',
     'conn.unpaired': 'Not paired',
-    'conn.unpairedHint': 'Not paired yet — tap "Add computer" to scan or paste a link',
+    'conn.unpairedHint':
+        'Not paired yet — tap "Add computer" to scan or paste a link',
     'conn.noCookie': 'No credentials: pass --dart-define=DSH_COOKIE',
     'conn.connected': 'Connected',
     'conn.failed': 'Connection failed',
@@ -767,7 +774,8 @@ class AppStrings {
     'conn.timeout': 'Connection timed out',
     'conn.timeoutHint': 'The network may be slow, or the computer is busy. Try again in a moment.',
     'conn.offline': 'Not connected',
-    'conn.offlineHint': 'Could not reach this computer. Retry, or pair a different one.',
+    'conn.offlineHint':
+        'Could not reach this computer. Retry, or pair a different one.',
     'conn.retry': 'Retry',
     'conn.pairNew': 'Pair another computer',
     'nav.jobs': 'Background jobs',
@@ -790,7 +798,6 @@ class AppLocaleScope extends InheritedWidget {
       oldWidget.language != language;
 }
 
-
 /// 相对时间格式化。
 ///
 /// 之前每个页面各写一份（`session_tasks_page` / `sessions_page` /
@@ -800,7 +807,9 @@ String formatRelativeTime(AppStrings strings, DateTime at, {DateTime? now}) {
   final base = now ?? DateTime.now();
   final d = base.difference(at);
   if (d.inMinutes < 1) return strings('time.justNow');
-  if (d.inHours < 1) return strings.withArgs('time.minutesAgo', {'n': d.inMinutes});
+  if (d.inHours < 1) {
+    return strings.withArgs('time.minutesAgo', {'n': d.inMinutes});
+  }
   if (d.inDays < 1) return strings.withArgs('time.hoursAgo', {'n': d.inHours});
   if (d.inDays < 2) return strings('time.yesterday');
   if (d.inDays < 30) return strings.withArgs('time.daysAgo', {'n': d.inDays});

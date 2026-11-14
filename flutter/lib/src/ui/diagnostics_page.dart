@@ -74,18 +74,13 @@ enum DiagnosticOverall {
 
 /// 诊断报告。
 class DiagnosticReport {
-  const DiagnosticReport({
-    required this.layers,
-    required this.generatedAt,
-  });
+  const DiagnosticReport({required this.layers, required this.generatedAt});
 
   final List<DiagnosticLayer> layers;
   final DateTime generatedAt;
 
-  int countOf(CheckStatus s) => layers
-      .expand((l) => l.checks)
-      .where((c) => c.status == s)
-      .length;
+  int countOf(CheckStatus s) =>
+      layers.expand((l) => l.checks).where((c) => c.status == s).length;
 
   DiagnosticOverall get overall {
     if (countOf(CheckStatus.error) > 0) return DiagnosticOverall.error;
@@ -100,8 +95,12 @@ class DiagnosticReport {
     final s = strings ?? AppStrings.forLanguage(AppLanguage.zh);
     final b = StringBuffer();
     b.writeln('# ${s('diag.reportTitle')}');
-    b.writeln('# ${s.withArgs('diag.reportGenerated', {'at': generatedAt.toIso8601String()})}');
-    b.writeln('# ${s.withArgs('diag.reportConclusion', {'name': overall.name})}');
+    b.writeln(
+      '# ${s.withArgs('diag.reportGenerated', {'at': generatedAt.toIso8601String()})}',
+    );
+    b.writeln(
+      '# ${s.withArgs('diag.reportConclusion', {'name': overall.name})}',
+    );
     b.writeln();
     for (final l in layers) {
       b.writeln('## ${l.title}');
@@ -116,6 +115,67 @@ class DiagnosticReport {
   }
 }
 
+/// 诊断执行器：报告在当前页面更新，不通过重建路由来重新检查。
+///
+/// 每次执行都调用 [run] 重新读取现场状态；同步设置 busy，防止下一帧前
+/// 的重复点击。失败保留上次报告，允许重试；页面退出后丢弃迟到结果。
+class DiagnosticsRunner extends StatefulWidget {
+  const DiagnosticsRunner({
+    super.key,
+    required this.run,
+    this.initialReport,
+    this.onBack,
+    this.onCopyReport,
+  });
+
+  final Future<DiagnosticReport> Function() run;
+  final DiagnosticReport? initialReport;
+  final VoidCallback? onBack;
+  final void Function(String text)? onCopyReport;
+
+  @override
+  State<DiagnosticsRunner> createState() => _DiagnosticsRunnerState();
+}
+
+class _DiagnosticsRunnerState extends State<DiagnosticsRunner> {
+  DiagnosticReport? _report;
+  bool _running = false;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _report = widget.initialReport;
+  }
+
+  Future<void> _run() async {
+    if (_running) return;
+    setState(() {
+      _running = true;
+      _failed = false;
+    });
+    try {
+      final report = await widget.run();
+      if (mounted) setState(() => _report = report);
+    } catch (_) {
+      // 不展示异常原文：网络异常可能包含完整地址或凭据。
+      if (mounted) setState(() => _failed = true);
+    } finally {
+      if (mounted) setState(() => _running = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => DiagnosticsPage(
+    report: _report,
+    running: _running,
+    onRun: _run,
+    onBack: widget.onBack,
+    onCopyReport: widget.onCopyReport,
+    errorMessage: _failed ? AppStrings.of(context)('diag.failed') : null,
+  );
+}
+
 /// 连接诊断页。
 class DiagnosticsPage extends StatelessWidget {
   const DiagnosticsPage({
@@ -127,6 +187,7 @@ class DiagnosticsPage extends StatelessWidget {
     this.advanced,
     this.title,
     this.onBack,
+    this.errorMessage,
   });
 
   /// `null` 表示尚未运行。
@@ -137,6 +198,9 @@ class DiagnosticsPage extends StatelessWidget {
 
   final VoidCallback? onRun;
   final void Function(String text)? onCopyReport;
+
+  /// 执行失败的脱敏说明，不覆盖上一次成功报告。
+  final String? errorMessage;
 
   /// 高级区（第三方 WebSocket 路径）。
   final Widget? advanced;
@@ -208,7 +272,11 @@ class DiagnosticsPage extends StatelessWidget {
                         disabledBackgroundColor: t.disabledBg,
                         disabledForegroundColor: t.disabledText,
                       ),
-                      child: Text(running ? strings('diag.checking') : strings('diag.start')),
+                      child: Text(
+                        running
+                            ? strings('diag.checking')
+                            : strings('diag.start'),
+                      ),
                     ),
                   ),
                 ),
@@ -230,6 +298,16 @@ class DiagnosticsPage extends StatelessWidget {
               ],
             ),
             const SizedBox(height: Space.s7),
+            if (errorMessage != null) ...[
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  errorMessage!,
+                  style: txt.body.copyWith(color: t.danger),
+                ),
+              ),
+              const SizedBox(height: Space.s4),
+            ],
 
             if (report != null)
               for (final layer in report!.layers) ...[
@@ -250,10 +328,7 @@ class DiagnosticsPage extends StatelessWidget {
 
   Widget _groupHeader(String title, Tokens t, AppTextStyles txt) => Padding(
     padding: const EdgeInsets.only(bottom: Space.s2),
-    child: Text(
-      title,
-      style: txt.chrome.copyWith(color: t.textSecondary),
-    ),
+    child: Text(title, style: txt.chrome.copyWith(color: t.textSecondary)),
   );
 }
 
@@ -296,10 +371,7 @@ class _SummaryBanner extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(minHeight: 88),
       padding: const EdgeInsets.all(Space.s6),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: Radii.rLg,
-      ),
+      decoration: BoxDecoration(color: bg, borderRadius: Radii.rLg),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -359,9 +431,7 @@ class _CheckRow extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 56),
       padding: const EdgeInsets.symmetric(vertical: Space.s3),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: t.borderSubtle, width: 0.5),
-        ),
+        border: Border(bottom: BorderSide(color: t.borderSubtle, width: 0.5)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,10 +439,7 @@ class _CheckRow extends StatelessWidget {
           // 状态不靠颜色单独传达：符号 + 文字说明
           SizedBox(
             width: 20,
-            child: Text(
-              glyph,
-              style: txt.body.copyWith(color: color),
-            ),
+            child: Text(glyph, style: txt.body.copyWith(color: color)),
           ),
           const SizedBox(width: Space.s3),
           Expanded(
