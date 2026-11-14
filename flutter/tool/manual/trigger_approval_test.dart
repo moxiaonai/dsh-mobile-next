@@ -42,6 +42,10 @@ Future<String> _gatewayOrigin() async {
   }
 }
 
+/// 脚本每跑一次会配一台新设备；结束时撤销，避免占满网关的设备名额
+/// （实测第 6 次开始 `/pair` 直接 409 `too_many_devices`）。
+String? _probeDeviceId;
+
 /// 走真实配对链路拿设备会话 cookie：
 /// 管理端点签一次性 token → 网关 /pair 换 session cookie。
 ///
@@ -84,6 +88,8 @@ Future<String> _pairedCookie(Uri gateway) async {
   if (sessionToken is! String) {
     throw StateError('配对成功但没有 sessionToken：$raw');
   }
+  final deviceId = body['deviceId'];
+  if (deviceId is String) _probeDeviceId = deviceId;
   client.close();
   return 'dsh-mobile-next-session=$sessionToken';
 }
@@ -91,6 +97,7 @@ Future<String> _pairedCookie(Uri gateway) async {
 void main() {
   test('触发一条真实审批并保留', () async {
     HttpOverrides.global = null; // 允许真实网络（默认被 flutter_test 拦掉）
+    addTearDown(_revokeProbeDevice);
     final uri = Uri.parse(await _gatewayOrigin());
     final cookie = await _pairedCookie(uri);
     print('已配对，拿到设备会话');
@@ -164,4 +171,25 @@ void main() {
     await mux.dispose();
   }, timeout: const Timeout(Duration(minutes: 3)));
 
+}
+
+/// 撤销本次脚本配对出来的设备。失败只打印，不影响测试结论。
+Future<void> _revokeProbeDevice() async {
+  final deviceId = _probeDeviceId;
+  if (deviceId == null) return;
+  final client = HttpClient();
+  try {
+    final req = await client.postUrl(
+      Uri.parse('$adminBase/mobile-access-next/devices/revoke'),
+    );
+    req.headers.contentType = ContentType.json;
+    req.write(jsonEncode({'deviceId': deviceId}));
+    final res = await req.close();
+    await res.drain<void>();
+    print('已撤销本次配对设备 $deviceId（${res.statusCode}）');
+  } catch (e) {
+    print('撤销配对设备失败：$e');
+  } finally {
+    client.close();
+  }
 }

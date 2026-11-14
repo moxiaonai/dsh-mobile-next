@@ -706,8 +706,10 @@ class _ShellState extends State<_Shell> {
   /// 顺便预热 JobCenter 需要的 sessionId。
   /// 订阅 `$events`（每条连接一次）。
   ///
-  /// 曾经只有「编译期注入 cookie」那条死路径订阅过 `$events`，真实配对
-  /// 流程完全没订 —— 结果服务端明明挂着 pending 审批，手机端永远是空列表。
+  /// `$events` 由 [DshConnection] 自己持有（一条连接一条流，重连后由它重开），
+  /// 这里只消费它广播出来的事件。早前这里会**再开一条** `$events` 流，
+  /// 两条流同时挂着时服务端只把增量推给登记的那一条 —— 表现为冷启动能靠
+  /// 重放看到待审批、在线时新审批永远不出现。
   ///
   /// 订阅建立时服务端会**重放**未结算的 waterfall，所以 App 启动时
   /// 已经挂起的审批也能补看到。
@@ -715,11 +717,9 @@ class _ShellState extends State<_Shell> {
     if (identical(_eventsConn, conn)) return;
     unawaited(_eventsSub?.cancel());
     _eventsConn = conn;
-    final stream = conn.mux.openStream(
-      r'$events',
-      payload: const {'args': <String, Object?>{}},
-    );
-    _eventsSub = stream.events.listen((event) {
+    final clientId = conn.eventsClientId;
+    if (clientId != null) _approvals?.setClientId(clientId);
+    _eventsSub = conn.events.listen((event) {
       if (event is! StreamItem || !mounted) return;
       final value = event.value;
       if (value is! Map) return;

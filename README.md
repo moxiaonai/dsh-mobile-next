@@ -284,7 +284,7 @@ iroh 通道额外要求：QUIC 用 EndpointId 认证并提供传输层重放保�
 | --- | --- | --- |
 | 插件 | 12 个文件 / 140 个用例 | ✅ **147 passed, 2 skipped**（`pnpm test` 实测） |
 | 原生 | `iroh-core` + `iroh-host` | ✅ **56 passed, 0 failed**（`cargo test` 实测） |
-| 客户端 | 33 个文件 / 320 个用例 | ✅ **320 passed**（`flutter test` 实测）；`flutter analyze` 无问题 |
+| 客户端 | 34 个文件 / 323 个用例 | ✅ **323 passed**（`flutter test` 实测）；`flutter analyze` 无问题 |
 
 ```bash
 cd dsh-mobile-next && pnpm test          # 插件

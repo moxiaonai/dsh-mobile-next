@@ -285,7 +285,7 @@ The iroh channel adds further requirements: QUIC authenticates EndpointIds and p
 | --- | --- | --- |
 | Plugin | 12 files / 140 cases | ✅ **147 passed, 2 skipped** (measured with `pnpm test`) |
 | Native | `iroh-core` + `iroh-host` | ✅ **56 passed, 0 failed** (measured with `cargo test`) |
-| Client | 33 files / 320 cases | ✅ **320 passed** (`flutter test`, measured); `flutter analyze` clean |
+| Client | 34 files / 323 cases | ✅ **323 passed** (`flutter test`, measured); `flutter analyze` clean |
 
 ```bash
 cd dsh-mobile-next && pnpm test          # plugin

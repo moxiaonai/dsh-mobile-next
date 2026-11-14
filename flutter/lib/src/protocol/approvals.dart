@@ -263,9 +263,17 @@ class WaterfallExtractor {
   }
 
   /// 从 `ready` 帧取 clientId。
+  ///
+  /// 不同版本把 clientId 放在顶层或 `value` 里，两种都要认。
   static String? clientIdOf(Map<String, Object?> frame) {
     if (frame['type'] != 'ready') return null;
-    final id = frame['clientId'];
-    return id is String && id.isNotEmpty ? id : null;
+    final direct = frame['clientId'];
+    if (direct is String && direct.isNotEmpty) return direct;
+    final nested = frame['value'];
+    if (nested is Map) {
+      final id = nested['clientId'];
+      if (id is String && id.isNotEmpty) return id;
+    }
+    return null;
   }
 }
