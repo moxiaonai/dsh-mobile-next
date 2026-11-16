@@ -54,6 +54,7 @@ try {
     'lib/client.js',
     'cordis.patch.yml',
     'README.md',
+    'changeLog.md',
     // 插件页显示中文名与图标靠这两个（缺了会退回包名 + 默认图）
     'locale/en.json',
     'locale/zh.json',

@@ -1,6 +1,6 @@
 {
   "name": "dsh-mobile-next",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "DSH 移动端接入插件：局域网 HTTPS + iroh 加密远程通道 + 独立设备配对",
   "type": "module",
   "main": "./lib/index.js",
@@ -26,6 +26,7 @@
     "cordis.patch.yml",
     "README.md",
     "README.en.md",
+    "changeLog.md",
     "docs/*.jpg",
     "docs/remote-access.md"
   ],

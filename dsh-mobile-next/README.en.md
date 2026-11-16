@@ -14,6 +14,8 @@ It provides two independent channels:
 
 > 中文说明见 [README.md](README.md)。
 
+See the [changelog](changeLog.md) for plugin release notes (in Chinese).
+
 ## Phone browser access (no app required)
 
 Open `https://computer-IP:3444/` in Safari or Chrome when your phone can reach the computer:
@@ -41,11 +43,11 @@ Only the login page is public. APIs, WebSockets, and other protected paths still
 
 ```bash
 # From the registry
-dsh plugin --profile desktop add dsh-mobile-next@0.2.2
+dsh plugin --profile desktop add dsh-mobile-next@0.2.3
 
 # Or from a tarball (offline / air-gapped)
 pnpm pack --pack-destination ./dist
-dsh plugin --profile desktop add ./dist/dsh-mobile-next-0.2.2.tgz
+dsh plugin --profile desktop add ./dist/dsh-mobile-next-0.2.3.tgz
 ```
 
 You can also use **Settings → Plugins → Install** in DSH and enter the package

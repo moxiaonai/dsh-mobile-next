@@ -5,6 +5,8 @@ DSH 移动端接入插件（自研）。提供两条互相独立的通道：
 - **局域网**：手机通过局域网 HTTPS 访问电脑上的 DSH，带设备配对认证。
 - **远程通道（iroh，实验性）**：加密直连优先、中继兜底，不需要域名或公网端口；需要本机原生组件与支持 iroh 的 App。见 [iroh 接入说明](docs/remote-access.md)。
 
+版本更新记录见 [更新日志](changeLog.md)。
+
 ## 手机浏览器访问（无需安装 App）
 
 手机与电脑网络互通后，在 Safari / Chrome 打开 `https://电脑IP:3444/`：
@@ -73,7 +75,7 @@ HTTPS 的私有 CA 需要在手机上安装并信任。登录 Cookie 仅属于�
 但**软链接不能分发给别人**。真实分发走 tarball：
 
 ```bash
-pnpm pack --pack-destination ./dist # → dist/dsh-mobile-next-0.2.2.tgz
+pnpm pack --pack-destination ./dist # → dist/dsh-mobile-next-0.2.3.tgz
 node scripts/verify-package.mjs    # 验证可独立安装并加载
 ```
 
@@ -97,11 +99,11 @@ node scripts/verify-package.mjs    # 验证可独立安装并加载
 ```bash
 # ① tarball（离线分发、内网）
 pnpm pack --pack-destination ./dist
-dsh plugin --profile desktop add ./dist/dsh-mobile-next-0.2.2.tgz
+dsh plugin --profile desktop add ./dist/dsh-mobile-next-0.2.3.tgz
 
 # ② registry（团队共享）
 pnpm publish --access public
-dsh plugin --profile desktop add dsh-mobile-next@0.2.2
+dsh plugin --profile desktop add dsh-mobile-next@0.2.3
 
 # ③ 插件页（GUI）
 # 设置 → 插件 → 安装 → 填包名或本地路径
