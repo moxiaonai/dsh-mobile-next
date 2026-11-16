@@ -37,6 +37,7 @@ import { request as httpRequest } from 'node:http'
 
 import { AccessController, AccessError } from './access.js'
 import { UpstreamAuth } from './upstream-auth.js'
+import { browserPairPage } from './browser-pair-page.js'
 import type { ResolvedConfig } from './config.js'
 
 /** 会话 Cookie 名。 */
@@ -270,7 +271,15 @@ export class LanGateway {
     const origin = request.headers.origin
     if (origin !== undefined && origin !== expected) return false
     const site = request.headers['sec-fetch-site']
-    return site !== 'cross-site'
+    if (site !== 'cross-site') return true
+    // 从消息/网页点击局域网登录链接的顶层导航不携带访问权限。
+    // 仅开放公开登录页的文档导航；POST、API、升级仍拒绝跨站请求。
+    const pathname = new URL(request.url ?? '/', 'https://placeholder').pathname
+    return this.options.publicOrigin === undefined
+      && (request.method === 'GET' || request.method === 'HEAD')
+      && (pathname === '/' || pathname === `${AUTH_PREFIX}/pair`)
+      && request.headers['sec-fetch-mode'] === 'navigate'
+      && request.headers['sec-fetch-dest'] === 'document'
   }
 
   /** 处理一个 HTTP 请求。 */
@@ -335,11 +344,19 @@ export class LanGateway {
         return
       }
 
-      // ③ 其余：要求会话
-      const session = readSessionCookie(request.headers.cookie)
+      // ③ 其余：要求会话。局域网浏览器首页未登录时展示配对入口，
+      // 不是把 DSH/API 放开；独立远程网关仍保留原有认证响应。
       try {
+        const session = readSessionCookie(request.headers.cookie)
         this.options.access.authorize(session)
       } catch {
+        if (this.options.publicOrigin === undefined && pathname === '/'
+          && (request.method === 'GET' || request.method === 'HEAD')) {
+          const page = browserPairPage(`${AUTH_PREFIX}/pair`)
+          response.writeHead(200, page.headers)
+          response.end(request.method === 'HEAD' ? undefined : page.html)
+          return
+        }
         sendText(
           response,
           401,
@@ -378,6 +395,13 @@ export class LanGateway {
   ): Promise<void> {
     const url = new URL(request.url ?? '/', 'https://placeholder')
     const token = url.searchParams.get('token') ?? ''
+    if (this.options.publicOrigin === undefined) {
+      const page = browserPairPage(`${AUTH_PREFIX}/pair`, token)
+      response.writeHead(200, page.headers)
+      response.end(page.html)
+      return
+    }
+    // 独立远程网关维持原有扫码页协议与交互。
     if (token === '') {
       sendText(response, 400, 'missing token')
       return

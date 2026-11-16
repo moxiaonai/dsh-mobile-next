@@ -5,13 +5,25 @@ DSH 移动端接入插件（自研）。提供两条互相独立的通道：
 - **局域网**：手机通过局域网 HTTPS 访问电脑上的 DSH，带设备配对认证。
 - **远程通道（iroh，实验性）**：加密直连优先、中继兜底，不需要域名或公网端口；需要本机原生组件与支持 iroh 的 App。见 [iroh 接入说明](docs/remote-access.md)。
 
+## 手机浏览器访问（无需安装 App）
+
+手机与电脑网络互通后，在 Safari / Chrome 打开 `https://电脑IP:3444/`：
+
+- **首次访问或会话失效**：显示网页登录页，粘贴电脑「移动访问」面板生成的**局域网配对链接**，点击「配对并进入 DSH」。也可直接在目标浏览器中打开配对链接，自动配对并进入。
+- **已有有效登录状态**：直接进入真实 DSH 网页。
+- **登录失败**：页面提示令牌过期、尝试次数过多或网络超时，可重新生成链接后重试。
+
+HTTPS 的私有 CA 需要在手机上安装并信任。登录 Cookie 仅属于完成配对的浏览器，App / 扫码软件内置浏览器的配对不会自动登录 Safari / Chrome。浏览器暂不持久化长期设备令牌或自动续期，会话过期后需重新配对。
+
+公开登录页不代表匿名开放 DSH：API、WebSocket 和其他受保护路径仍要求有效会话，电脑管理接口仍不允许经网关调用。独立 iroh 远程入口保持原有认证协议。
+
 ## 状态
 
 | 项 | 状态 |
 | --- | --- |
 | 类型检查 | ✅ `tsc --noEmit` 无错 |
-| 测试 | ✅ **147 passed, 2 skipped**（12 个文件） |
-| 构建 | ✅ host 80 KB（gzip 23.1 KB）+ client 75 KB（gzip 16.7 KB） |
+| 测试 | ✅ **162 passed, 2 skipped**（13 个文件） |
+| 构建 | ✅ host + client 构建通过 |
 | 装进 DSH | ✅ 已加载（host + client 双面） |
 | 界面 | ✅ 侧栏一键开全屏面板，真实页面验证过 |
 | 端到端 | ✅ 配对 → 访问 DSH → 安全边界全通过 |
@@ -61,7 +73,7 @@ DSH 移动端接入插件（自研）。提供两条互相独立的通道：
 但**软链接不能分发给别人**。真实分发走 tarball：
 
 ```bash
-pnpm pack                          # → dsh-mobile-next-0.2.0.tgz (~141 KB)
+pnpm pack --pack-destination ./dist # → dist/dsh-mobile-next-0.2.2.tgz
 node scripts/verify-package.mjs    # 验证可独立安装并加载
 ```
 
@@ -84,12 +96,12 @@ node scripts/verify-package.mjs    # 验证可独立安装并加载
 
 ```bash
 # ① tarball（离线分发、内网）
-pnpm pack
-dsh plugin --profile desktop add ./dist/dsh-mobile-next-0.2.0.tgz
+pnpm pack --pack-destination ./dist
+dsh plugin --profile desktop add ./dist/dsh-mobile-next-0.2.2.tgz
 
 # ② registry（团队共享）
 pnpm publish --access public
-dsh plugin --profile desktop add dsh-mobile-next@0.2.0
+dsh plugin --profile desktop add dsh-mobile-next@0.2.2
 
 # ③ 插件页（GUI）
 # 设置 → 插件 → 安装 → 填包名或本地路径

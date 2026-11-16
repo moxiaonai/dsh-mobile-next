@@ -133,14 +133,16 @@ describe('GET 配对页（扫码入口）', () => {
     expect(res.body).toContain("method: 'POST'")
   })
 
-  it('无 token 返回 400', async () => {
+  it('无 token 返回手动配对入口', async () => {
     const gw = await startGateway()
     const res = await call({
       port: gw.port,
       path: `${AUTH_PREFIX}/pair`,
       caPem: gw.caPem,
     })
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(200)
+    expect(res.body).toContain('id="pair-form"')
+    expect(res.body).toContain('配对链接或配对令牌')
   })
 
   it('POST 仍然走配对接口（不是 HTML）', async () => {

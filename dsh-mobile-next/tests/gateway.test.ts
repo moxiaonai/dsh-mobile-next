@@ -179,7 +179,7 @@ describe('LanGateway 端到端', () => {
     expect(JSON.parse(res.body)).toEqual({ ok: true })
   })
 
-  it('无会话访问根路径返回 401', async () => {
+  it('无会话访问根路径返回网页登录页，但 API 仍要求认证', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'dshmn-gw-'))
     cleanup.push(async () => rm(dir, { recursive: true, force: true }))
     const upstream = await startUpstream()
@@ -191,8 +191,31 @@ describe('LanGateway 端到端', () => {
     })
 
     const res = await httpsCall({ port, path: '/', caPem })
-    expect(res.status).toBe(401)
-    expect(res.body).toContain('authentication required')
+    expect(res.status).toBe(200)
+    expect(res.headers['content-type']).toBe('text/html; charset=utf-8')
+    expect(res.headers['cache-control']).toBe('no-store')
+    expect(res.body).toContain('配对并进入 DSH')
+    expect(res.body).not.toContain('fake dsh')
+    const head = await httpsCall({ port, path: '/', method: 'HEAD', caPem })
+    expect(head.status).toBe(200)
+    expect(head.body).toBe('')
+    for (const path of ['/api/remote.mux', '/sessions/example']) {
+      const api = await httpsCall({ port, path, caPem })
+      expect(api.status).toBe(401)
+      expect(api.body).toContain('authentication required')
+    }
+    expect((await httpsCall({ port, path: '/', method: 'POST', caPem })).status).toBe(401)
+    expect(upstream.seenHosts).toEqual([])
+    const navigation = {
+      'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document',
+    }
+    for (const path of ['/', '/mobile-access-next/pair']) {
+      expect((await httpsCall({ port, path, headers: navigation, caPem })).status).toBe(200)
+      expect((await httpsCall({ port, path, headers: { 'sec-fetch-site': 'cross-site' }, caPem })).status).toBe(403)
+    }
+    expect((await httpsCall({ port, path: '/', headers: { ...navigation, origin: 'https://evil.example' }, caPem })).status).toBe(403)
+    expect((await httpsCall({ port, path: '/api/remote.mux', headers: navigation, caPem })).status).toBe(403)
+    expect((await httpsCall({ port, path: '/mobile-access-next/pair', method: 'POST', headers: navigation, caPem })).status).toBe(403)
   })
 
   it('静态资源无需认证', async () => {
@@ -289,13 +312,15 @@ describe('LanGateway 端到端', () => {
       tlsDirectory: join(dir, 'tls'),
     })
 
-    const res = await httpsCall({
-      port,
-      path: '/',
-      headers: { cookie: `${SESSION_COOKIE}=forged-token` },
-      caPem,
-    })
-    expect(res.status).toBe(401)
+    for (const token of ['forged-token', '%invalid-encoding']) {
+      const headers = { cookie: `${SESSION_COOKIE}=${token}` }
+      const page = await httpsCall({ port, path: '/', headers, caPem })
+      expect(page.status).toBe(200)
+      expect(page.body).toContain('配对并进入 DSH')
+      const api = await httpsCall({ port, path: '/api/remote.mux', headers, caPem })
+      expect(api.status).toBe(401)
+    }
+    expect(upstream.seenHosts).toEqual([])
   })
 })
 

@@ -14,13 +14,25 @@ It provides two independent channels:
 
 > 中文说明见 [README.md](README.md)。
 
+## Phone browser access (no app required)
+
+Open `https://computer-IP:3444/` in Safari or Chrome when your phone can reach the computer:
+
+- **First visit or expired session:** the page accepts a LAN pairing link generated in the computer's Mobile Access panel. You can also open that link directly in the target browser to pair automatically.
+- **Valid browser session:** the gateway opens the real DSH web page.
+- **Pairing failure:** the page explains invalid or expired tokens, too many attempts, and network timeouts so you can retry.
+
+Install and trust the computer's private CA on your phone first. Login cookies belong to the browser that completed pairing; pairing in the app or an embedded browser does not sign Safari or Chrome in. The browser does not persist a long-lived device token or renew sessions automatically, so expired sessions require pairing again.
+
+Only the login page is public. APIs, WebSockets, and other protected paths still require authentication; computer management endpoints remain blocked through the gateway. The independent iroh remote entry keeps its existing authentication protocol.
+
 ## Status
 
 | Item | Status |
 | --- | --- |
 | Typecheck | ✅ `tsc --noEmit` clean |
-| Tests | ✅ **147 passed, 2 skipped** (12 files) |
-| Build | ✅ host 80 KB (gzip 23.1 KB) + client 75 KB (gzip 16.7 KB) |
+| Tests | ✅ **162 passed, 2 skipped** (13 files) |
+| Build | ✅ host + client builds pass |
 | Loads in DSH | ✅ both host and client faces |
 | UI | ✅ one-click full-screen panel from the sidebar |
 | End to end | ✅ pairing → access DSH → security boundary |
@@ -29,11 +41,11 @@ It provides two independent channels:
 
 ```bash
 # From the registry
-dsh plugin --profile desktop add dsh-mobile-next@0.2.0
+dsh plugin --profile desktop add dsh-mobile-next@0.2.2
 
 # Or from a tarball (offline / air-gapped)
-pnpm pack
-dsh plugin --profile desktop add ./dist/dsh-mobile-next-0.2.0.tgz
+pnpm pack --pack-destination ./dist
+dsh plugin --profile desktop add ./dist/dsh-mobile-next-0.2.2.tgz
 ```
 
 You can also use **Settings → Plugins → Install** in DSH and enter the package
